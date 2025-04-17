@@ -33,5 +33,32 @@ func GetProfile(ctx *gin.Context) {
 		Username: user.Username,
 	}
 
-	helpers.SuccessResponse(ctx, response)
+	helpers.SuccessResponse(ctx, "Data Found!", response)
+}
+
+// GetAllUsers handles the request to retrieve a paginated list of users.
+// It extracts pagination parameters from the query string, retrieves the total
+// count of users, and fetches a paginated list of users from the database.
+// The function returns a paginated response containing the users list along
+// with pagination metadata.
+
+func GetAllUsers(ctx *gin.Context) {
+	// Extract pagination parameters from query string
+	page, limit, offset := helpers.GetPaginationParams(ctx)
+
+	var usersList []users.User
+	var total int64
+
+	// Get total count of users
+	database.DB.Model(&users.User{}).Count(&total)
+
+	// Fetch users with pagination
+	database.DB.
+		Limit(limit).
+		Offset(offset).
+		Order("created_at desc").
+		Find(&usersList)
+
+	// Use PaginatedResponse to return users and pagination info
+	helpers.PaginatedResponse(ctx, "Data Found!", usersList, page, limit, total)
 }

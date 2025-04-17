@@ -43,5 +43,5 @@ func Register(ctx *gin.Context) {
 		Username: user.Username,
 	}
 
-	helpers.SuccessResponse(ctx, response)
+	helpers.SuccessResponse(ctx, "Data Found", response)
 }

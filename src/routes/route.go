@@ -26,6 +26,7 @@ func API() *gin.Engine {
 		v1.Use(middleware.JWTAuthMiddleware()) // 🔐 Apply middleware here
 		{
 			v1.GET("/user/profile", user.GetProfile)
+			v1.GET("/users", user.GetAllUsers)
 		}
 	}
 
