@@ -42,11 +42,46 @@ func GetProfile(ctx *gin.Context) {
 // The function returns a paginated response containing the users list along
 // with pagination metadata.
 
+// func GetAllUsers(ctx *gin.Context) {
+// 	page, limit, offset := helpers.GetPaginationParams(ctx)
+
+// 	// Use the generic helper to get paginated users
+// 	usersList, meta, _ := helpers.GetPaginatedData[users.User](ctx, database.DB, "created_at desc", page, limit, offset)
+
+// 	// Convert to response struct
+// 	var profileResponses []users.ProfileResponse
+// 	for _, user := range usersList {
+// 		profileResponses = append(profileResponses, users.ProfileResponse{
+// 			ID:       user.ID,
+// 			Email:    user.Email,
+// 			Username: user.Username,
+// 		})
+// 	}
+
+// 	if len(profileResponses) == 0 {
+// 		profileResponses = []users.ProfileResponse{}
+// 	}
+
+// 	helpers.SuccessResponse(ctx, "Data Found!", profileResponses, meta)
+// }
+
 func GetAllUsers(ctx *gin.Context) {
+	// Extract pagination parameters from query string
 	page, limit, offset := helpers.GetPaginationParams(ctx)
 
-	// Use the generic helper to get paginated users
-	usersList, meta, _ := helpers.GetPaginatedData[users.User](ctx, database.DB, "created_at desc", page, limit, offset)
+	// var usersList []users.User
+	var total int64
+
+	// Get total count of users
+	database.DB.Model(&users.User{}).Count(&total)
+
+	// Retrieve users with pagination and ordering
+	var usersList []users.User
+	database.DB.
+		Limit(limit).
+		Offset(offset).
+		Order("created_at desc").
+		Find(&usersList)
 
 	// Convert to response struct
 	var profileResponses []users.ProfileResponse
@@ -58,9 +93,15 @@ func GetAllUsers(ctx *gin.Context) {
 		})
 	}
 
+	// Return consistent structure (empty array if nothing found)
 	if len(profileResponses) == 0 {
 		profileResponses = []users.ProfileResponse{}
 	}
 
-	helpers.SuccessResponse(ctx, "Data Found!", profileResponses, meta)
+	// Send success response with pagination
+	helpers.SuccessResponse(ctx, "Data Found!", profileResponses, helpers.PaginationMeta{
+		Page:  page,
+		Limit: limit,
+		Total: total,
+	})
 }

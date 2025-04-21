@@ -3,6 +3,7 @@ package main
 import (
 	"gin/src/configs/database"
 	"gin/src/routes"
+	"gin/src/seeders/user_seeders"
 
 	"github.com/gin-gonic/gin"
 )
@@ -14,13 +15,29 @@ func main() {
 	gin.DisableConsoleColor()
 
 	// connection database
-	database.ConnectDatabase()
+	db := database.ConnectDatabase()
+
+	// seeder
+	user_seeders.SeedUsers()
 
 	// routing to gin/src/routes folder
-	r := routes.API()
+	r := routes.API(db)
 
 	err := r.Run(":9000")
 	if err != nil {
 		panic(err)
 	}
 }
+
+// loggers.InitLogger()
+
+// // Menulis log
+// loggers.Log.Info("App started")
+// loggers.Log.Warn("This is a warning")
+// loggers.Log.Error("Something went wrong")
+
+// log := loggers.NewLogger()
+// defer log.Close()
+
+// debug exit
+// helpers.DdLog("Debugging user before login:", ser)

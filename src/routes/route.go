@@ -1,16 +1,21 @@
 package routes
 
 import (
-	"gin/src/http/controllers/api/v1/auth"
-	"gin/src/http/controllers/api/v1/user"
+	"gin/src/controllers/api/v1/auth"
+	"gin/src/controllers/api/v1/user"
 	"gin/src/middleware"
+	"gin/src/services/auth_services"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
-func API() *gin.Engine {
+func API(db *gorm.DB) *gin.Engine {
 	r := gin.Default()
+
+	// Initialize the AuthService
+	authService := auth_services.NewAuthService(db)
 
 	v1 := r.Group("/api/v1")
 	{
@@ -21,12 +26,14 @@ func API() *gin.Engine {
 		})
 
 		v1.POST("/user/register", auth.Register)
-		v1.POST("/user/login", auth.Login)
+		v1.POST("/user/login", auth.Login(db, authService))
 
-		v1.Use(middleware.JWTAuthMiddleware()) // 🔐 Apply middleware here
+		v1.Use(middleware.JWTAuthMiddleware())
 		{
 			v1.GET("/user/profile", user.GetProfile)
 			v1.GET("/users", user.GetAllUsers)
+
+			v1.POST("/token/refresh", auth.RefreshToken(db, authService))
 		}
 	}
 
