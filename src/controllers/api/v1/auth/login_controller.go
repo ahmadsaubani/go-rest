@@ -33,14 +33,14 @@ func Login(conn *database.DBConnection, authService *auth_services.AuthService) 
 		// Find user by email
 		var user users.User
 		if err := helpers.FindOneByField(&user, "email", input.Email); err != nil {
-			helpers.ErrorResponse(fmt.Errorf("Invalid email or password: %w", err), ctx, http.StatusUnauthorized)
+			helpers.ErrorResponse(fmt.Errorf("Invalid email: %w", err), ctx, http.StatusUnauthorized)
 
 			return
 		}
 
 		// Compare password
 		if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(input.Password)); err != nil {
-			ctx.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid email or password"})
+			helpers.ErrorResponse(fmt.Errorf("Invalid password"), ctx, http.StatusUnauthorized)
 			return
 		}
 

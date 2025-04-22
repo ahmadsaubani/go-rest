@@ -2,8 +2,10 @@ package helpers
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"gin/src/configs/database"
+	"gin/src/utils/loggers"
 	"math"
 	"net/http"
 	"strconv"
@@ -138,6 +140,23 @@ func ErrorResponse(err error, ctx *gin.Context, httpCode ...int) {
 	if len(httpCode) == 0 {
 		httpCode = append(httpCode, http.StatusBadRequest)
 	}
+
+	// Baca ulang body jika ingin log data request
+	var requestData map[string]interface{}
+	if rawBody, exists := ctx.Get("RequestBody"); exists {
+		if bodyBytes, ok := rawBody.([]byte); ok {
+			_ = json.Unmarshal(bodyBytes, &requestData)
+		}
+	}
+
+	loggers.Log.Error("ErrorResponse: ", map[string]interface{}{
+		"error":       err.Error(),
+		"path":        ctx.FullPath(),
+		"method":      ctx.Request.Method,
+		"clientIP":    ctx.ClientIP(),
+		"status":      httpCode[0],
+		"requestBody": requestData,
+	})
 
 	webResponse := Response{
 		Success: false,

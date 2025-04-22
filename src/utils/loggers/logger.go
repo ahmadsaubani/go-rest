@@ -6,26 +6,33 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
-
-	"github.com/sirupsen/logrus"
 )
 
-var Log *logrus.Logger
+var (
+	Log  *Logger
+	once sync.Once
+)
 
 type Logger struct {
 	file *os.File
 	log  *log.Logger
 }
 
+// init dijalankan otomatis saat package ini di-import
+func init() {
+	once.Do(func() {
+		Log = NewLogger()
+	})
+}
+
 func NewLogger() *Logger {
-	// Buat folder logs jika belum ada
 	logDir := "storage/logs"
 	if _, err := os.Stat(logDir); os.IsNotExist(err) {
-		os.Mkdir(logDir, os.ModePerm)
+		_ = os.MkdirAll(logDir, os.ModePerm)
 	}
 
-	// Gunakan nama file berdasarkan tanggal
 	fileName := time.Now().Format("2006-01-02") + ".log"
 	filePath := filepath.Join(logDir, fileName)
 
@@ -51,19 +58,24 @@ func (l *Logger) Error(message string, context map[string]interface{}) {
 func (l *Logger) writeLog(level, message string, context map[string]interface{}) {
 	timestamp := time.Now().Format(time.RFC3339)
 	entry := map[string]interface{}{
-		"context":   context,
-		"message":   message,
-		"level":     level,
 		"timestamp": timestamp,
+		"level":     level,
+		"message":   message,
+		"context":   context,
 	}
 
-	jsonData, err := json.Marshal(entry)
+	jsonData, err := json.MarshalIndent(entry, "", "  ")
 	if err != nil {
 		fmt.Printf("Failed to marshal log entry: %v", err)
 		return
 	}
 
-	l.log.Println(string(jsonData))
+	// Separator mewah
+	separator := "\n============================================================\n"
+
+	logOutput := fmt.Sprintf("%s\n%s%s", separator, string(jsonData), separator)
+
+	l.log.Println(logOutput)
 }
 
 func (l *Logger) Close() {
