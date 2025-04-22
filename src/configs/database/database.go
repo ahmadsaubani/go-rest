@@ -16,7 +16,7 @@ import (
 
 var DB *gorm.DB
 
-func ConnectDatabase() *gorm.DB {
+func ConnectDatabaseUsingGorm() *gorm.DB {
 	fmt.Println("=====Connect To Database=====")
 	// Load environment variables
 	if err := godotenv.Load(); err != nil {
@@ -64,7 +64,7 @@ func ConnectDatabase() *gorm.DB {
 	fmt.Println("✅ Successfully connected to database using GORM!")
 
 	// Call CheckTables to check and migrate models
-	// ResetDB(DB)
+	// ResetDBUsingGorm(DB)
 
 	return DB
 }
@@ -84,7 +84,7 @@ func CheckTables(models ...interface{}) {
 }
 
 // ResetDB drops and recreates all tables
-func ResetDB(db *gorm.DB) {
+func ResetDBUsingGorm(db *gorm.DB) {
 	fmt.Println("=====Process Migrate all tables=====")
 	fmt.Println("⚠️ Dropping all tables....")
 	err := db.Migrator().DropTable(

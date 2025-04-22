@@ -2,10 +2,10 @@
 #### STRUCTURE PROJECT
 ```sh
 myapp/
-├── config/
-│   └── database/
-│       └── database.go
 ├── src/
+│   ├── config/
+│   │  └── database/
+│   │     └── database.go
 │   ├── controllers/
 │   │   └── api/
 │   │       ├── v1/
@@ -15,11 +15,11 @@ myapp/
 │   │       │   └── user/
 │   │       │       └── user_controller.go
 │   ├── entities/
-│   │   └── auth/
-│   │       ├── access_token.go
-│   │       └── register_controller.go
-│   │   └── users/
-│   │       ├── user.go
+│   │   ├── auth/
+│   │   │   ├── access_token.go
+│   │   │   └── register_controller.go
+│   │   ├── users/
+│   │   │   └── user.go
 │   ├── helpers/
 │   │   ├── debug.go
 │   │   └── response.go

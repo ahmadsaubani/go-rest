@@ -15,7 +15,7 @@ func main() {
 	gin.DisableConsoleColor()
 
 	// connection database
-	db := database.ConnectDatabase()
+	db := database.ConnectDatabaseUsingGorm()
 
 	// seeder
 	user_seeders.SeedUsers()
