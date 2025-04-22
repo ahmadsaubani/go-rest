@@ -2,7 +2,6 @@ package user
 
 import (
 	"fmt"
-	"gin/src/configs/database"
 	"gin/src/entities/users"
 	"gin/src/helpers"
 	"net/http"
@@ -21,7 +20,7 @@ func GetProfile(ctx *gin.Context) {
 
 	// Find user by ID
 	var user users.User
-	if err := database.DB.First(&user, userID).Error; err != nil {
+	if err := helpers.GetModelByID(&user, userID); err != nil {
 		fmt.Println(err)
 		helpers.ErrorResponse(err, ctx, http.StatusNotFound)
 		return
@@ -36,17 +35,23 @@ func GetProfile(ctx *gin.Context) {
 	helpers.SuccessResponse(ctx, "Data Found!", response)
 }
 
-// GetAllUsers handles the request to retrieve a paginated list of users.
-// It extracts pagination parameters from the query string, retrieves the total
-// count of users, and fetches a paginated list of users from the database.
-// The function returns a paginated response containing the users list along
-// with pagination metadata.
-
 // func GetAllUsers(ctx *gin.Context) {
+// 	// Extract pagination parameters from query string
 // 	page, limit, offset := helpers.GetPaginationParams(ctx)
 
-// 	// Use the generic helper to get paginated users
-// 	usersList, meta, _ := helpers.GetPaginatedData[users.User](ctx, database.DB, "created_at desc", page, limit, offset)
+// 	// var usersList []users.User
+// 	var total int64
+
+// 	// Get total count of users
+// 	database.DB.Model(&users.User{}).Count(&total)
+
+// 	// Retrieve users with pagination and ordering
+// 	var usersList []users.User
+// 	database.DB.
+// 		Limit(limit).
+// 		Offset(offset).
+// 		Order("created_at desc").
+// 		Find(&usersList)
 
 // 	// Convert to response struct
 // 	var profileResponses []users.ProfileResponse
@@ -58,48 +63,45 @@ func GetProfile(ctx *gin.Context) {
 // 		})
 // 	}
 
+// 	// Return consistent structure (empty array if nothing found)
 // 	if len(profileResponses) == 0 {
 // 		profileResponses = []users.ProfileResponse{}
 // 	}
 
-// 	helpers.SuccessResponse(ctx, "Data Found!", profileResponses, meta)
+// 	// Send success response with pagination
+// 	helpers.SuccessResponse(ctx, "Data Found!", profileResponses, helpers.PaginationMeta{
+// 		Page:  page,
+// 		Limit: limit,
+// 		Total: total,
+// 	})
 // }
 
 func GetAllUsers(ctx *gin.Context) {
-	// Extract pagination parameters from query string
 	page, limit, offset := helpers.GetPaginationParams(ctx)
-
-	// var usersList []users.User
-	var total int64
-
-	// Get total count of users
-	database.DB.Model(&users.User{}).Count(&total)
-
-	// Retrieve users with pagination and ordering
 	var usersList []users.User
-	database.DB.
-		Limit(limit).
-		Offset(offset).
-		Order("created_at desc").
-		Find(&usersList)
 
-	// Convert to response struct
-	var profileResponses []users.ProfileResponse
-	for _, user := range usersList {
-		profileResponses = append(profileResponses, users.ProfileResponse{
-			ID:       user.ID,
-			Email:    user.Email,
-			Username: user.Username,
+	total, err := helpers.CountModel[users.User]()
+	if err != nil {
+		helpers.ErrorResponse(err, ctx, http.StatusInternalServerError)
+		return
+	}
+
+	err = helpers.GetAllModels(&usersList, limit, offset, "created_at DESC")
+	if err != nil {
+		helpers.ErrorResponse(err, ctx, http.StatusInternalServerError)
+		return
+	}
+
+	var response []users.ProfileResponse
+	for _, u := range usersList {
+		response = append(response, users.ProfileResponse{
+			ID:       u.ID,
+			Email:    u.Email,
+			Username: u.Username,
 		})
 	}
 
-	// Return consistent structure (empty array if nothing found)
-	if len(profileResponses) == 0 {
-		profileResponses = []users.ProfileResponse{}
-	}
-
-	// Send success response with pagination
-	helpers.SuccessResponse(ctx, "Data Found!", profileResponses, helpers.PaginationMeta{
+	helpers.SuccessResponse(ctx, "Data Found!", response, helpers.PaginationMeta{
 		Page:  page,
 		Limit: limit,
 		Total: total,

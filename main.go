@@ -6,6 +6,7 @@ import (
 	"gin/src/seeders/user_seeders"
 
 	"github.com/gin-gonic/gin"
+	_ "github.com/lib/pq"
 )
 
 // main is the entry point of the application. It disables console colors for Gin,
@@ -15,7 +16,7 @@ func main() {
 	gin.DisableConsoleColor()
 
 	// connection database
-	db := database.ConnectDatabaseUsingGorm()
+	db := database.ConnectDatabase()
 
 	// seeder
 	user_seeders.SeedUsers()

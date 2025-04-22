@@ -3,139 +3,181 @@ package auth_services
 import (
 	"fmt"
 	"gin/src/entities/auth"
+	"gin/src/helpers"
 	"os"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"gorm.io/gorm"
 )
 
-// AuthService is a struct for the token generation and refresh logic
-type AuthService struct {
-	DB *gorm.DB
-}
+// AuthService handles auth-related operations
+type AuthService struct{}
 
 // NewAuthService initializes a new AuthService
-func NewAuthService(db *gorm.DB) *AuthService {
-	return &AuthService{DB: db}
+func NewAuthService() *AuthService {
+	return &AuthService{}
+}
+
+type TokenResult struct {
+	AccessToken      string    `json:"access_token"`
+	RefreshToken     string    `json:"refresh_token"`
+	AccessExpiresAt  time.Time `json:"access_expires_at"`
+	RefreshExpiresAt time.Time `json:"refresh_expires_at"`
 }
 
 // GenerateTokens generates access and refresh tokens and stores them in the database
-func (s *AuthService) GenerateTokens(userID uint) (string, string, error) {
-	// Get the JWT secret from environment
+func (s *AuthService) GenerateTokens(userID int64) (*TokenResult, error) {
+	fmt.Println("Generating tokens for user ID:", userID)
+
 	secret := os.Getenv("JWT_SECRET")
 	if secret == "" {
-		return "", "", fmt.Errorf("JWT secret is not set")
+		return nil, fmt.Errorf("JWT secret is not set")
 	}
 
-	accessTokenLifetime := time.Now().Add(1 * time.Minute)
-	// Generate Access Token
+	accessTokenLifetime := time.Now().Add(50 * time.Minute)
+	refreshTokenLifetime := time.Now().Add(24 * 24 * time.Minute) // 24 hari
+
+	// Access Token
 	accessTokenClaims := jwt.MapClaims{
 		"user_id": userID,
-		"exp":     accessTokenLifetime.Unix(), // expired in 5 minutes
-
+		"exp":     accessTokenLifetime.Unix(),
 	}
 	accessToken := jwt.NewWithClaims(jwt.SigningMethodHS256, accessTokenClaims)
 	accessTokenString, err := accessToken.SignedString([]byte(secret))
 	if err != nil {
-		return "", "", err
+		return nil, err
 	}
 
-	// Store refresh token in the database (separate table for refresh tokens)
 	accessTokenRecord := auth.AccessToken{
 		UserID:    userID,
 		Token:     accessTokenString,
 		ExpiresAt: accessTokenLifetime,
 	}
-
-	// Save refresh token record to database
-	if err := s.DB.Create(&accessTokenRecord).Error; err != nil {
-		return "", "", err
+	if err := helpers.InsertModel(&accessTokenRecord); err != nil {
+		return nil, err
 	}
 
-	// Generate Refresh Token
+	// Refresh Token
 	refreshTokenClaims := jwt.MapClaims{
 		"user_id": userID,
-		"exp":     time.Now().Add(30 * 24 * time.Hour).Unix(), // 30 days for refresh token
+		"exp":     refreshTokenLifetime.Unix(),
 	}
 	refreshToken := jwt.NewWithClaims(jwt.SigningMethodHS256, refreshTokenClaims)
 	refreshTokenString, err := refreshToken.SignedString([]byte(secret))
 	if err != nil {
-		return "", "", err
+		return nil, err
 	}
 
-	// Store refresh token in the database (separate table for refresh tokens)
 	refreshTokenRecord := auth.RefreshToken{
 		UserID:        userID,
 		AccessTokenID: accessTokenRecord.ID,
 		Token:         refreshTokenString,
-		ExpiresAt:     time.Now().Add(30 * 24 * time.Hour),
+		ExpiresAt:     refreshTokenLifetime,
+	}
+	if err := helpers.InsertModel(&refreshTokenRecord); err != nil {
+		return nil, err
 	}
 
-	// Save refresh token record to database
-	if err := s.DB.Create(&refreshTokenRecord).Error; err != nil {
-		return "", "", err
-	}
-
-	return accessTokenString, refreshTokenString, nil
+	return &TokenResult{
+		AccessToken:      accessTokenString,
+		RefreshToken:     refreshTokenString,
+		AccessExpiresAt:  accessTokenLifetime,
+		RefreshExpiresAt: refreshTokenLifetime,
+	}, nil
 }
 
-// RefreshToken generates a new access token and refresh token when the refresh token is valid
-func (s *AuthService) RefreshToken(refreshTokenString string) (string, string, error) {
-	// Load JWT secret
+// RefreshToken verifies and regenerates tokens if the refresh token is valid
+func (s *AuthService) RefreshToken(refreshTokenString string) (*TokenResult, error) {
 	secret := os.Getenv("JWT_SECRET")
 	if secret == "" {
-		return "", "", fmt.Errorf("JWT secret is not set")
+		return nil, fmt.Errorf("JWT secret is not set")
 	}
 
-	// Debug log
-	fmt.Println("🔍 Incoming refresh token:", refreshTokenString)
-
-	// Parse token
 	parsedToken, err := jwt.Parse(refreshTokenString, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method")
 		}
 		return []byte(secret), nil
 	})
-	if err != nil {
-		return "", "", fmt.Errorf("token parse error: %v", err)
+	if err != nil || !parsedToken.Valid {
+		return nil, fmt.Errorf("invalid or expired refresh token")
 	}
 
-	if !parsedToken.Valid {
-		return "", "", fmt.Errorf("invalid or expired refresh token")
-	}
-
-	// Extract claims
 	claims, ok := parsedToken.Claims.(jwt.MapClaims)
-	if !ok || !parsedToken.Valid {
-		return "", "", fmt.Errorf("could not extract claims from token")
+	if !ok {
+		return nil, fmt.Errorf("invalid claims in token")
 	}
 
-	// Parse user ID safely (JWT stores numeric values as float64)
 	userIDFloat, ok := claims["user_id"].(float64)
 	if !ok {
-		return "", "", fmt.Errorf("user_id is missing or invalid in token claims")
+		return nil, fmt.Errorf("user_id is missing or invalid in token claims")
 	}
-	userID := uint(userIDFloat)
+	userID := int64(userIDFloat)
 
-	// Validate token exists and not claimed
 	var refreshTokenRecord auth.RefreshToken
-	if err := s.DB.Where("token = ? AND claimed = ?", refreshTokenString, false).First(&refreshTokenRecord).Error; err != nil {
-		return "", "", fmt.Errorf("refresh token not found or already used")
+	err = helpers.FindOneByField(&refreshTokenRecord, "token", refreshTokenString)
+	fmt.Println("Refresh token record:", err)
+	if err != nil {
+		return nil, fmt.Errorf("refresh token not found")
+	}
+
+	if refreshTokenRecord.Claimed {
+		return nil, fmt.Errorf("refresh token already used")
 	}
 
 	// Generate new tokens
-	accessToken, newRefreshToken, err := s.GenerateTokens(userID)
+	tokenResult, err := s.GenerateTokens(userID)
 	if err != nil {
-		return "", "", err
+		return nil, err
 	}
 
-	// Mark current refresh token as claimed
+	// Tandai refresh token lama sebagai digunakan
 	refreshTokenRecord.Claimed = true
-	if err := s.DB.Save(&refreshTokenRecord).Error; err != nil {
-		return "", "", err
+	if err := helpers.UpdateModelByID(&refreshTokenRecord, refreshTokenRecord.ID); err != nil {
+		return nil, err
 	}
 
-	return accessToken, newRefreshToken, nil
+	return tokenResult, nil
+}
+
+// RevokeToken marks a refresh token as claimed (used)
+func (s *AuthService) RevokeToken(token string) error {
+	var refreshToken auth.RefreshToken
+	err := helpers.FindOneByField(&refreshToken, "token", token)
+	if err != nil {
+		return fmt.Errorf("token not found: %v", err)
+	}
+
+	refreshToken.Claimed = true
+	return helpers.UpdateModelByID(&refreshToken, refreshToken.ID)
+}
+
+// VerifyToken verifies a JWT access token and returns the user ID if valid
+func (s *AuthService) VerifyToken(tokenString string) (uint, error) {
+	secret := os.Getenv("JWT_SECRET")
+	if secret == "" {
+		return 0, fmt.Errorf("JWT secret is not set")
+	}
+
+	parsedToken, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method")
+		}
+		return []byte(secret), nil
+	})
+	if err != nil || !parsedToken.Valid {
+		return 0, fmt.Errorf("invalid or expired token: %v", err)
+	}
+
+	claims, ok := parsedToken.Claims.(jwt.MapClaims)
+	if !ok {
+		return 0, fmt.Errorf("failed to parse claims")
+	}
+
+	userIDFloat, ok := claims["user_id"].(float64)
+	if !ok {
+		return 0, fmt.Errorf("user_id claim is missing or invalid")
+	}
+
+	return uint(userIDFloat), nil
 }

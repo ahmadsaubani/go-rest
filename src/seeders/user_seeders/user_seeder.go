@@ -2,7 +2,6 @@ package user_seeders
 
 import (
 	"fmt"
-	"gin/src/configs/database"
 	"gin/src/entities/users"
 	"gin/src/helpers"
 	"log"
@@ -13,15 +12,18 @@ import (
 )
 
 func SeedUsers() {
-	var userCount int64
-	database.DB.Model(&users.User{}).Count(&userCount)
+	userCount, err := helpers.CountModel[users.User]()
+	if err != nil {
+		fmt.Println("Error counting users:", err)
+		return
+	}
 
 	if userCount >= 1000 {
 		fmt.Println("Users already seeded.")
 		return
 	}
 
-	for i := 0; i < 1000; i++ {
+	for i := 0; i < 50; i++ {
 		password := "password123" // default password
 		hashedPassword, _ := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 
@@ -36,9 +38,9 @@ func SeedUsers() {
 			Password: string(hashedPassword),
 		}
 
-		helpers.DumpLog("User trying to login:", user)
+		helpers.DumpLog("creating user:", user)
 
-		if err := database.DB.Create(&user).Error; err != nil {
+		if err := helpers.InsertModel(&user); err != nil {
 			log.Printf("failed to seed user %d: %v\n", i, err)
 		}
 	}

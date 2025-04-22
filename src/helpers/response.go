@@ -1,7 +1,9 @@
 package helpers
 
 import (
+	"database/sql"
 	"fmt"
+	"gin/src/configs/database"
 	"math"
 	"net/http"
 	"strconv"
@@ -174,4 +176,26 @@ func GetPaginationParams(ctx *gin.Context) (page, limit, offset int) {
 
 	offset = (page - 1) * limit
 	return
+}
+
+func CountModel[T any]() (int64, error) {
+	if database.GormDB != nil {
+		var total int64
+		err := database.GormDB.Model(new(T)).Count(&total).Error
+		return total, err
+	}
+
+	if database.SQLDB == nil {
+		return 0, sql.ErrConnDone
+	}
+
+	var model T
+	table := GetTableName(&model)
+
+	query := fmt.Sprintf("SELECT COUNT(*) FROM %s", table)
+	row := database.SQLDB.QueryRow(query)
+
+	var total int64
+	err := row.Scan(&total)
+	return total, err
 }

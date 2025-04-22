@@ -1,6 +1,7 @@
 package routes
 
 import (
+	"gin/src/configs/database"
 	"gin/src/controllers/api/v1/auth"
 	"gin/src/controllers/api/v1/user"
 	"gin/src/middleware"
@@ -8,14 +9,14 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 )
 
-func API(db *gorm.DB) *gin.Engine {
+func API(db *database.DBConnection) *gin.Engine {
+
 	r := gin.Default()
 
 	// Initialize the AuthService
-	authService := auth_services.NewAuthService(db)
+	authService := auth_services.NewAuthService()
 
 	v1 := r.Group("/api/v1")
 	{

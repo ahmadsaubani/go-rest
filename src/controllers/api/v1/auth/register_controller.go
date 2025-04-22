@@ -1,7 +1,6 @@
 package auth
 
 import (
-	"gin/src/configs/database" // Assuming this is where your DB instance is located
 	"gin/src/entities/users"
 	"gin/src/helpers"
 	"net/http"
@@ -30,9 +29,7 @@ func Register(ctx *gin.Context) {
 	// Update the password with the hashed password
 	user.Password = string(hashedPassword)
 
-	// Create user with GORM
-
-	if err := database.DB.Create(&user).Error; err != nil {
+	if err := helpers.InsertModel(&user); err != nil {
 		helpers.ErrorResponse(err, ctx, http.StatusBadRequest)
 		return
 	}

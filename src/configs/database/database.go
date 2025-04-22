@@ -1,44 +1,53 @@
 package database
 
 import (
+	"database/sql"
 	"fmt"
 	"gin/src/entities/auth"
 	"gin/src/entities/users"
 	"log"
 	"os"
-	"strconv"
 	"time"
 
 	"github.com/joho/godotenv"
+	_ "github.com/lib/pq"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
 
-var DB *gorm.DB
+type DBConnection struct {
+	Gorm *gorm.DB
+	SQL  *sql.DB
+}
+
+var GormDB *gorm.DB
+var SQLDB *sql.DB
+
+func ConnectDatabase() *DBConnection {
+	fmt.Println("===== Connect To Database =====")
+
+	// Load .env
+	if err := godotenv.Load(); err != nil {
+		log.Println("⚠️ Warning: .env file not found")
+	}
+
+	useGorm := os.Getenv("USE_GORM") == "true"
+
+	if useGorm {
+		GormDB := ConnectDatabaseUsingGorm()
+		ResetDBUsingGorm(GormDB)
+		return &DBConnection{Gorm: GormDB}
+	} else {
+		SQLDB := connectWithSQL()
+		return &DBConnection{SQL: SQLDB}
+	}
+}
 
 func ConnectDatabaseUsingGorm() *gorm.DB {
 	fmt.Println("=====Connect To Database=====")
 	// Load environment variables
-	if err := godotenv.Load(); err != nil {
-		log.Println("❌ Warning: .env file not found or could not be loaded")
-	}
-
-	host := os.Getenv("HOST")
-	portStr := os.Getenv("PORT")
-	user := os.Getenv("USER")
-	dbname := os.Getenv("DB_NAME")
-	pass := os.Getenv("PASSWORD")
-
-	port, err := strconv.Atoi(portStr)
-	if err != nil {
-		log.Fatalf("Invalid port number: %v", err)
-	}
-
-	// PostgreSQL DSN
-	dsn := fmt.Sprintf(
-		"host=%s port=%d user=%s dbname=%s password=%s sslmode=disable TimeZone=UTC",
-		host, port, user, dbname, pass,
-	)
+	cfg := LoadDBConfig()
+	dsn := cfg.ToDSN()
 
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
@@ -60,27 +69,13 @@ func ConnectDatabaseUsingGorm() *gorm.DB {
 	sqlDB.SetConnMaxLifetime(time.Hour)
 
 	// Set global DB instance
-	DB = db
+	GormDB = db
 	fmt.Println("✅ Successfully connected to database using GORM!")
 
 	// Call CheckTables to check and migrate models
-	// ResetDBUsingGorm(DB)
+	ResetDBUsingGorm(GormDB)
 
-	return DB
-}
-
-// CheckTables checks if the tables exist for all provided models and migrates them if not.
-func CheckTables(models ...interface{}) {
-	for _, model := range models {
-		if !DB.Migrator().HasTable(model) {
-			if err := DB.AutoMigrate(model); err != nil {
-				log.Fatalf("❌ Auto migration failed for %v: %v", model, err)
-			}
-			fmt.Printf("%v table migration completed successfully!\n", model)
-		} else {
-			fmt.Printf("%v table already exists, skipping migration.\n", model)
-		}
-	}
+	return GormDB
 }
 
 // ResetDB drops and recreates all tables
@@ -109,4 +104,63 @@ func ResetDBUsingGorm(db *gorm.DB) {
 	}
 
 	fmt.Println("✅ Database migrated successfully")
+}
+
+func connectWithSQL() *sql.DB {
+	fmt.Println("=====Connect To Database=====")
+
+	cfg := LoadDBConfig()
+	dsn := cfg.ToDSN()
+	fmt.Println("Connecting with DSN:", dsn)
+
+	db, err := sql.Open("postgres", dsn)
+	if err != nil {
+		log.Fatalf("❌ Failed to connect to database: %v", err)
+	}
+
+	// Test connection
+	if err := db.Ping(); err != nil {
+		log.Fatalf("❌ Database is not reachable: %v", err)
+	}
+
+	// Configure connection pool
+	db.SetMaxOpenConns(10)
+	db.SetMaxIdleConns(5)
+	db.SetConnMaxLifetime(time.Hour)
+
+	SQLDB = db
+	fmt.Println("✅ Successfully connected to database!")
+
+	// Manual migration
+	ResetDB(SQLDB)
+
+	return SQLDB
+}
+
+func ResetDB(db *sql.DB) {
+	fmt.Println("=== NATIVE MIGRATION ===")
+
+	// Drop tables
+	for _, name := range []string{"access_tokens", "refresh_tokens", "users"} {
+		dropSQL := fmt.Sprintf(`DROP TABLE IF EXISTS "%s" CASCADE;`, name)
+		if _, err := db.Exec(dropSQL); err != nil {
+			log.Fatalf("❌ Drop failed: %v", err)
+		}
+	}
+
+	// Create tables
+	createQueries := []string{
+		GenerateCreateTableSQL("users", users.User{}),
+		GenerateCreateTableSQL("access_tokens", auth.AccessToken{}),
+		GenerateCreateTableSQL("refresh_tokens", auth.RefreshToken{}),
+	}
+
+	for _, q := range createQueries {
+
+		if _, err := db.Exec(q); err != nil {
+			log.Fatalf("❌ Create failed: %v", err)
+		}
+	}
+
+	fmt.Println("✅ Migrated using native SQL")
 }

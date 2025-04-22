@@ -6,11 +6,11 @@ import (
 )
 
 type AccessToken struct {
-	ID        uint       `gorm:"primaryKey;autoIncrement"`
-	UserID    uint       `gorm:"not null;index"`
-	User      users.User `gorm:"foreignKey:UserID"`
-	Token     string     `gorm:"uniqueIndex"`
-	ExpiresAt time.Time
-	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`
-	UpdatedAt time.Time `gorm:"autoUpdateTime" json:"updated_at"`
+	ID        int64       `gorm:"primaryKey;autoIncrement" db:"id,primary,serial" json:"id"`
+	UserID    int64       `gorm:"not null;index" db:"user_id" json:"user_id"`
+	User      *users.User `gorm:"foreignKey:UserID db:"-"` // Tetap db:"-" karena User struct tidak bisa masuk langsung ke kolom SQL
+	Token     string      `gorm:"uniqueIndex" db:"token" json:"token"`
+	ExpiresAt time.Time   `db:"expires_at" json:"expires_at"`
+	CreatedAt time.Time   `gorm:"autoCreateTime" db:"created_at" json:"created_at"`
+	UpdatedAt time.Time   `gorm:"autoUpdateTime" db:"updated_at" json:"updated_at"`
 }
