@@ -142,11 +142,18 @@ func ErrorResponse(err error, ctx *gin.Context, httpCode ...int) {
 	}
 
 	// Baca ulang body jika ingin log data request
-	var requestData map[string]interface{}
+	var requestData interface{}
 	if rawBody, exists := ctx.Get("RequestBody"); exists {
 		if bodyBytes, ok := rawBody.([]byte); ok {
-			_ = json.Unmarshal(bodyBytes, &requestData)
+			var jsonBody map[string]interface{}
+			if err := json.Unmarshal(bodyBytes, &jsonBody); err == nil {
+				requestData = jsonBody
+			} else {
+				requestData = string(bodyBytes) // fallback as string
+			}
 		}
+	} else if formData, exists := ctx.Get("RequestForm"); exists {
+		requestData = formData
 	}
 
 	loggers.Log.Error("ErrorResponse: ", map[string]interface{}{

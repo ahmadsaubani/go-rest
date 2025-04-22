@@ -14,8 +14,8 @@ import (
 )
 
 type LoginRequest struct {
-	Email    string `json:"email" binding:"required,email"`
-	Password string `json:"password" binding:"required"`
+	Email    string `form:"email" json:"email" binding:"required,email"`
+	Password string `form:"password" json:"password" binding:"required"`
 }
 
 // Login handles user login and token generation
@@ -24,7 +24,7 @@ func Login(conn *database.DBConnection, authService *auth_services.AuthService) 
 		var input LoginRequest
 
 		// Bind input data from request body
-		if err := ctx.ShouldBindJSON(&input); err != nil {
+		if err := ctx.ShouldBind(&input); err != nil {
 			helpers.ErrorResponse(fmt.Errorf("Invalid input: %w", err), ctx, http.StatusBadRequest)
 
 			return
@@ -68,9 +68,9 @@ func Login(conn *database.DBConnection, authService *auth_services.AuthService) 
 func RefreshToken(conn *database.DBConnection, authService *auth_services.AuthService) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		var body struct {
-			RefreshToken string `json:"refresh_token" binding:"required"`
+			RefreshToken string `form:"refresh_token" json:"refresh_token" binding:"required"`
 		}
-		if err := ctx.ShouldBindJSON(&body); err != nil {
+		if err := ctx.ShouldBind(&body); err != nil {
 			helpers.ErrorResponse(fmt.Errorf("Invalid input: %w", err), ctx, http.StatusBadRequest)
 			return
 		}
