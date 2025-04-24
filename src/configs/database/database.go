@@ -8,7 +8,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -23,12 +22,7 @@ var GormDB *gorm.DB
 var SQLDB *sql.DB
 
 func ConnectDatabase() *DBConnection {
-	fmt.Println("===== Connect To Database =====")
-
-	// Load .env
-	if err := godotenv.Load(); err != nil {
-		fmt.Println("⚠️ Warning: .env file not found:%w", err)
-	}
+	fmt.Println("===== Connecting To Database =====")
 
 	useGorm := os.Getenv("USE_GORM") == "true"
 
@@ -43,7 +37,7 @@ func ConnectDatabase() *DBConnection {
 }
 
 func ConnectDatabaseUsingGorm() *gorm.DB {
-	fmt.Println("=====Connect To Database=====")
+	fmt.Println("=====USING GORM=====")
 	// Load environment variables
 	cfg := LoadDBConfig()
 	dsn := cfg.ToDSN()
@@ -79,7 +73,7 @@ func ConnectDatabaseUsingGorm() *gorm.DB {
 
 // ResetDB drops and recreates all tables
 func ResetDBUsingGorm(db *gorm.DB) {
-	fmt.Println("=====Process Migrate all tables=====")
+	fmt.Println("=== START RESET DB GORM MIGRATION ===")
 	fmt.Println("⚠️ Dropping all tables....")
 	err := db.Migrator().DropTable(
 		&users.User{},
@@ -106,11 +100,10 @@ func ResetDBUsingGorm(db *gorm.DB) {
 }
 
 func connectWithSQL() *sql.DB {
-	fmt.Println("=====Connect To Database=====")
+	fmt.Println("=====USING NATIVE=====")
 
 	cfg := LoadDBConfig()
 	dsn := cfg.ToDSN()
-	fmt.Println("Connecting with DSN:", dsn)
 
 	db, err := sql.Open("postgres", dsn)
 	if err != nil {
@@ -137,7 +130,7 @@ func connectWithSQL() *sql.DB {
 }
 
 func ResetDB(db *sql.DB) {
-	fmt.Println("=== NATIVE MIGRATION ===")
+	fmt.Println("=== START RESET DB NATIVE MIGRATION ===")
 
 	// Drop tables
 	for _, name := range []string{"access_tokens", "refresh_tokens", "users"} {

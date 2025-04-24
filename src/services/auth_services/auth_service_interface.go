@@ -1,12 +1,15 @@
 package auth_services
 
-import "github.com/gin-gonic/gin"
+import (
+	"context"
+
+	"github.com/gin-gonic/gin"
+)
 
 type AuthServiceInterface interface {
-	Register(email string, username string, password string) (interface{}, error)
-	Login(email, password string) (gin.H, error)
+	Register(ctx context.Context) (interface{}, error)
+	Login(ctx context.Context) (gin.H, error)
 	GenerateTokens(userID int64) (*TokenResult, error)
-	RefreshToken(token string) (*TokenResult, error)
-	// RevokeToken(token string) error
+	RefreshToken(ctx context.Context) (*TokenResult, error)
 	VerifyToken(token string) (int64, error)
 }

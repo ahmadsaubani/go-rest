@@ -1,13 +1,14 @@
 package auth_repositories
 
 import (
+	"context"
 	"gin/src/entities/auth"
 	"gin/src/entities/users"
 	"time"
 )
 
 type AuthRepositoryInterface interface {
-	Register(email string, username string, password string) (map[string]interface{}, error)
+	Register(ctx context.Context) (map[string]interface{}, error)
 	FindByEmail(email string) (*users.User, error)
 	FindByUsername(username string) (*users.User, error)
 	CreateUser(user *users.User) error

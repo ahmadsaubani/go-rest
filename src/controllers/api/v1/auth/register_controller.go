@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"gin/src/helpers"
 	"gin/src/services/auth_services"
 	"net/http"
@@ -16,6 +17,7 @@ type RegisterRequest struct {
 
 func Register(authService auth_services.AuthServiceInterface) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
+		requestCtx := ctx.Request.Context()
 		var body RegisterRequest
 
 		// Bind the request body to struct
@@ -24,8 +26,13 @@ func Register(authService auth_services.AuthServiceInterface) gin.HandlerFunc {
 			return
 		}
 
+		// Menggunakan context untuk menyimpan email dan password
+		requestCtx = context.WithValue(requestCtx, "email", body.Email)
+		requestCtx = context.WithValue(requestCtx, "username", body.Username)
+		requestCtx = context.WithValue(requestCtx, "password", body.Password)
+
 		// Call service to register the user
-		response, err := authService.Register(body.Email, body.Username, body.Password)
+		response, err := authService.Register(requestCtx)
 		if err != nil {
 			helpers.ErrorResponse(err, ctx, http.StatusBadRequest)
 			return

@@ -201,7 +201,16 @@ func scanRowIntoStruct[T any](row *sql.Row, model *T) error {
 		}
 	}
 
-	return row.Scan(dest...)
+	// return row.Scan(dest...)
+	err := row.Scan(dest...)
+	if errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("record not found")
+	}
+	if err != nil {
+		return fmt.Errorf("scan error: %w", err)
+	}
+
+	return nil
 }
 
 func UpdateModelByID[T any](model *T, id any) error {

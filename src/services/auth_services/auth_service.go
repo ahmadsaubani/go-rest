@@ -1,6 +1,7 @@
 package auth_services
 
 import (
+	"context"
 	"fmt"
 	"gin/src/repositories/auth_repositories"
 	"os"
@@ -11,13 +12,13 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-var JWTSecret = func() string {
+func getJWTSecret() string {
 	secret := os.Getenv("JWT_SECRET")
 	if secret == "" {
-		panic("Warning: JWT_SECRET environment variable not set")
+		panic("JWT_SECRET environment variable is not set")
 	}
 	return secret
-}()
+}
 
 type AuthService struct {
 	authRepo auth_repositories.AuthRepositoryInterface
@@ -35,9 +36,10 @@ type TokenResult struct {
 }
 
 // Register handles the registration logic
-func (s *AuthService) Register(email string, username string, password string) (interface{}, error) {
+func (s *AuthService) Register(ctx context.Context) (interface{}, error) {
+
 	// Call repository to perform the actual registration
-	response, err := s.authRepo.Register(email, username, password)
+	response, err := s.authRepo.Register(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("could not register user: %w", err)
 	}
@@ -46,7 +48,11 @@ func (s *AuthService) Register(email string, username string, password string) (
 	return response, nil
 }
 
-func (s *AuthService) Login(email, password string) (gin.H, error) {
+func (s *AuthService) Login(ctx context.Context) (gin.H, error) {
+	// Mengambil email dan password dari context
+	email := ctx.Value("email").(string)
+	password := ctx.Value("password").(string)
+
 	user, err := s.authRepo.FindByEmail(email)
 	if err != nil {
 		return nil, fmt.Errorf("invalid email: %w", err)
@@ -71,10 +77,6 @@ func (s *AuthService) Login(email, password string) (gin.H, error) {
 }
 
 func (s *AuthService) GenerateTokens(userID int64) (*TokenResult, error) {
-
-	if JWTSecret == "" {
-		return nil, fmt.Errorf("JWT secret is not set")
-	}
 
 	accessTokenLifetime := time.Now().Add(50 * time.Minute)
 	refreshTokenLifetime := time.Now().Add(24 * 24 * time.Minute)
@@ -109,10 +111,12 @@ func (s *AuthService) createJWTToken(userID int64, exp time.Time) (string, error
 		"exp":     exp.Unix(),
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString([]byte(JWTSecret))
+	return token.SignedString([]byte(getJWTSecret()))
 }
 
-func (s *AuthService) RefreshToken(refreshTokenString string) (*TokenResult, error) {
+func (s *AuthService) RefreshToken(ctx context.Context) (*TokenResult, error) {
+	refreshTokenString := ctx.Value("refresh_token").(string)
+
 	userID, err := s.VerifyToken(refreshTokenString)
 	if err != nil {
 		return nil, fmt.Errorf("invalid or expired refresh token")
@@ -137,12 +141,9 @@ func (s *AuthService) RefreshToken(refreshTokenString string) (*TokenResult, err
 }
 
 func (s *AuthService) VerifyToken(tokenString string) (int64, error) {
-	if JWTSecret == "" {
-		return 0, fmt.Errorf("JWT secret is not set")
-	}
 
 	parsedToken, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-		return []byte(JWTSecret), nil
+		return []byte(getJWTSecret()), nil
 	})
 	if err != nil || !parsedToken.Valid {
 		return 0, fmt.Errorf("invalid or expired token")

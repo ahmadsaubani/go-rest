@@ -1,6 +1,7 @@
 package auth_repositories
 
 import (
+	"context"
 	"fmt"
 	"gin/src/entities/auth"
 	"gin/src/entities/users"
@@ -17,17 +18,19 @@ func NewAuthRepository() *authRepository {
 }
 
 // Register handles the actual logic of saving a new user to the database
-func (r *authRepository) Register(email string, username string, password string) (map[string]interface{}, error) {
-	var user users.User
+func (r *authRepository) Register(ctx context.Context) (map[string]interface{}, error) {
+	// Ambil data dari context
+	email, _ := ctx.Value("email").(string)
+	username, _ := ctx.Value("username").(string)
+	password, _ := ctx.Value("password").(string)
 
 	// Check if the email is already in use
-	if err := helpers.FindOneByField(&user, "email", email); err == nil {
+	if _, err := r.FindByEmail(email); err == nil {
 		return nil, fmt.Errorf("email already in use")
 	}
 
-	// Check if the username is already in use
-	if err := helpers.FindOneByField(&user, "username", username); err == nil {
-		return nil, fmt.Errorf("username already in use")
+	if _, err := r.FindByUsername(username); err == nil {
+		return nil, fmt.Errorf("Username already in use")
 	}
 
 	// Hash password

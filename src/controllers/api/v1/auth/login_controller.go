@@ -1,10 +1,10 @@
 package auth
 
 import (
+	"context"
 	"fmt"
 	"gin/src/helpers"
 	"gin/src/services/auth_services"
-
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -22,14 +22,21 @@ type RefreshTokenRequest struct {
 // Login memanggil fungsi ke service
 func Login(authService auth_services.AuthServiceInterface) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
+		// Convert gin.Context to context.Context
+		requestCtx := ctx.Request.Context()
+
 		var input LoginRequest
 		if err := ctx.ShouldBind(&input); err != nil {
 			helpers.ErrorResponse(fmt.Errorf("Invalid input: %w", err), ctx, http.StatusBadRequest)
 			return
 		}
 
+		// Menggunakan context untuk menyimpan email dan password
+		requestCtx = context.WithValue(requestCtx, "email", input.Email)
+		requestCtx = context.WithValue(requestCtx, "password", input.Password)
+
 		// Memanggil service untuk login
-		response, err := authService.Login(input.Email, input.Password)
+		response, err := authService.Login(requestCtx)
 		if err != nil {
 			helpers.ErrorResponse(err, ctx, http.StatusUnauthorized)
 			return
@@ -42,14 +49,20 @@ func Login(authService auth_services.AuthServiceInterface) gin.HandlerFunc {
 // RefreshToken memanggil fungsi untuk menghasilkan token baru berdasarkan refresh token
 func RefreshToken(authService auth_services.AuthServiceInterface) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
+		// Convert gin.Context to context.Context
+		requestCtx := ctx.Request.Context()
+
 		var body RefreshTokenRequest
 		if err := ctx.ShouldBind(&body); err != nil {
 			helpers.ErrorResponse(fmt.Errorf("Invalid input: %w", err), ctx, http.StatusBadRequest)
 			return
 		}
 
+		// Menyimpan refresh token ke context
+		requestCtx = context.WithValue(requestCtx, "refresh_token", body.RefreshToken)
+
 		// Memanggil service untuk refresh token
-		tokenResult, err := authService.RefreshToken(body.RefreshToken)
+		tokenResult, err := authService.RefreshToken(requestCtx)
 		if err != nil {
 			helpers.ErrorResponse(fmt.Errorf("%w", err), ctx, http.StatusInternalServerError)
 			return

@@ -6,6 +6,7 @@ import (
 	"gin/src/seeders/user_seeders"
 
 	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 )
 
@@ -13,20 +14,26 @@ import (
 // connects to the database, sets up the API routes, and starts the server on port 9000.
 
 func main() {
+	// Disable console color for clean output
 	gin.DisableConsoleColor()
 
-	// connection database
+	// Load environment variables from .env file
+	if err := godotenv.Load(); err != nil {
+		panic("Error loading .env file: " + err.Error()) // Panic with the error message if .env file loading fails
+	}
+
+	// Establish database connection
 	db := database.ConnectDatabase()
 
-	// seeder
+	// Seed users
 	user_seeders.SeedUsers()
 
-	// routing to gin/src/routes folder
+	// Initialize routes
 	r := routes.API(db)
 
-	err := r.Run(":9000")
-	if err != nil {
-		panic(err)
+	// Run the server on port 9000
+	if err := r.Run(":9000"); err != nil {
+		panic("Error starting server: " + err.Error()) // Panic if server fails to start
 	}
 }
 

@@ -23,7 +23,7 @@ func SeedUsers() {
 		return
 	}
 
-	for i := 0; i < 50; i++ {
+	for i := 0; i < 10; i++ {
 		password := "password123" // default password
 		hashedPassword, _ := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 

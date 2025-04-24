@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"os"
 	"strconv"
-
-	"github.com/joho/godotenv"
 )
 
 type DBConfig struct {
@@ -19,10 +17,6 @@ type DBConfig struct {
 }
 
 func LoadDBConfig() DBConfig {
-	if err := godotenv.Load(); err != nil {
-		fmt.Println("❌ Warning: .env file not found or could not be loaded: %w", err)
-	}
-
 	port, err := strconv.Atoi(os.Getenv("PORT"))
 	if err != nil {
 		fmt.Println("Invalid port number: %v", err)
