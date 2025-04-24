@@ -30,7 +30,7 @@ func InsertModel[T any](model *T) error {
 	}
 
 	if database.SQLDB == nil {
-		log.Println("❌ No database connection available")
+		fmt.Println("❌ No database connection available: %w", sql.ErrConnDone)
 		return sql.ErrConnDone
 	}
 
@@ -171,7 +171,7 @@ func GetModelByID[T any](model *T, id any) error {
 	}
 
 	if database.SQLDB == nil {
-		log.Println("❌ No database connection available")
+		fmt.Println("❌ No database connection available: %w", sql.ErrConnDone)
 		return sql.ErrConnDone
 	}
 

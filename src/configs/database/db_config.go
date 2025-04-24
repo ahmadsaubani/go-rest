@@ -2,7 +2,6 @@ package database
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"strconv"
 
@@ -21,12 +20,12 @@ type DBConfig struct {
 
 func LoadDBConfig() DBConfig {
 	if err := godotenv.Load(); err != nil {
-		log.Println("❌ Warning: .env file not found or could not be loaded")
+		fmt.Println("❌ Warning: .env file not found or could not be loaded: %w", err)
 	}
 
 	port, err := strconv.Atoi(os.Getenv("PORT"))
 	if err != nil {
-		log.Fatalf("Invalid port number: %v", err)
+		fmt.Println("Invalid port number: %v", err)
 	}
 
 	tz := os.Getenv("TIMEZONE")
@@ -57,10 +56,3 @@ func (cfg DBConfig) ToDSN() string {
 		cfg.Host, cfg.Port, cfg.User, cfg.DBName, cfg.Password, cfg.SSLMode, cfg.Timezone,
 	)
 }
-
-// func (cfg DBConfig) ToDSN() string {
-// 	return fmt.Sprintf(
-// 		"host=%s port=%d user=%s dbname=%s password=%s sslmode=%s TimeZone='%s'",
-// 		cfg.Host, cfg.Port, cfg.User, cfg.DBName, cfg.Password, cfg.SSLMode, cfg.Timezone,
-// 	)
-// }

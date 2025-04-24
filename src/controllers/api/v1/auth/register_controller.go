@@ -1,44 +1,37 @@
 package auth
 
 import (
-	"gin/src/entities/users"
 	"gin/src/helpers"
+	"gin/src/services/auth_services"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"golang.org/x/crypto/bcrypt"
 )
 
-func Register(ctx *gin.Context) {
-	var user users.User
+type RegisterRequest struct {
+	Email    string `form:"email" json:"email" binding:"required,email"`
+	Username string `form:"username" json:"username" binding:"required"`
+	Password string `form:"password" json:"password" binding:"required,min=8"`
+}
 
-	// Bind JSON directly to struct
-	if err := ctx.ShouldBindJSON(&user); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
-		return
+func Register(authService auth_services.AuthServiceInterface) gin.HandlerFunc {
+	return func(ctx *gin.Context) {
+		var body RegisterRequest
+
+		// Bind the request body to struct
+		if err := ctx.ShouldBind(&body); err != nil {
+			helpers.ErrorResponse(err, ctx, http.StatusBadRequest)
+			return
+		}
+
+		// Call service to register the user
+		response, err := authService.Register(body.Email, body.Username, body.Password)
+		if err != nil {
+			helpers.ErrorResponse(err, ctx, http.StatusBadRequest)
+			return
+		}
+
+		// Return the response from service
+		helpers.SuccessResponse(ctx, "User registered successfully", response)
 	}
-
-	// Hash the user's password before saving it
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
-
-	if err != nil {
-		helpers.ErrorResponse(err, ctx, http.StatusBadRequest)
-		return
-	}
-
-	// Update the password with the hashed password
-	user.Password = string(hashedPassword)
-
-	if err := helpers.InsertModel(&user); err != nil {
-		helpers.ErrorResponse(err, ctx, http.StatusBadRequest)
-		return
-	}
-
-	response := users.ResponseRegister{
-		ID:       user.ID,
-		Email:    user.Email,
-		Username: user.Username,
-	}
-
-	helpers.SuccessResponse(ctx, "Data Found", response)
 }

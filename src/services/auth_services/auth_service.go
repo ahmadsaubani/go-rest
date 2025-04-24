@@ -2,20 +2,29 @@ package auth_services
 
 import (
 	"fmt"
-	"gin/src/entities/auth"
-	"gin/src/helpers"
+	"gin/src/repositories/auth_repositories"
 	"os"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
+	"golang.org/x/crypto/bcrypt"
 )
 
-// AuthService handles auth-related operations
-type AuthService struct{}
+var JWTSecret = func() string {
+	secret := os.Getenv("JWT_SECRET")
+	if secret == "" {
+		panic("Warning: JWT_SECRET environment variable not set")
+	}
+	return secret
+}()
 
-// NewAuthService initializes a new AuthService
-func NewAuthService() *AuthService {
-	return &AuthService{}
+type AuthService struct {
+	authRepo auth_repositories.AuthRepositoryInterface
+}
+
+func NewAuthService(repo auth_repositories.AuthRepositoryInterface) *AuthService {
+	return &AuthService{authRepo: repo}
 }
 
 type TokenResult struct {
@@ -25,56 +34,64 @@ type TokenResult struct {
 	RefreshExpiresAt time.Time `json:"refresh_expires_at"`
 }
 
-// GenerateTokens generates access and refresh tokens and stores them in the database
-func (s *AuthService) GenerateTokens(userID int64) (*TokenResult, error) {
-	fmt.Println("Generating tokens for user ID:", userID)
+// Register handles the registration logic
+func (s *AuthService) Register(email string, username string, password string) (interface{}, error) {
+	// Call repository to perform the actual registration
+	response, err := s.authRepo.Register(email, username, password)
+	if err != nil {
+		return nil, fmt.Errorf("could not register user: %w", err)
+	}
 
-	secret := os.Getenv("JWT_SECRET")
-	if secret == "" {
+	// Return the response from repository (already processed in the repository)
+	return response, nil
+}
+
+func (s *AuthService) Login(email, password string) (gin.H, error) {
+	user, err := s.authRepo.FindByEmail(email)
+	if err != nil {
+		return nil, fmt.Errorf("invalid email: %w", err)
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
+		return nil, fmt.Errorf("invalid password")
+	}
+
+	tokens, err := s.GenerateTokens(user.ID)
+	if err != nil {
+		return nil, fmt.Errorf("could not generate tokens: %w", err)
+	}
+
+	return gin.H{
+		"token_type":         "Bearer",
+		"access_token":       tokens.AccessToken,
+		"access_expires_at":  tokens.AccessExpiresAt,
+		"refresh_token":      tokens.RefreshToken,
+		"refresh_expires_at": tokens.RefreshExpiresAt,
+	}, nil
+}
+
+func (s *AuthService) GenerateTokens(userID int64) (*TokenResult, error) {
+
+	if JWTSecret == "" {
 		return nil, fmt.Errorf("JWT secret is not set")
 	}
 
 	accessTokenLifetime := time.Now().Add(50 * time.Minute)
-	refreshTokenLifetime := time.Now().Add(24 * 24 * time.Minute) // 24 hari
+	refreshTokenLifetime := time.Now().Add(24 * 24 * time.Minute)
 
-	// Access Token
-	accessTokenClaims := jwt.MapClaims{
-		"user_id": userID,
-		"exp":     accessTokenLifetime.Unix(),
-	}
-	accessToken := jwt.NewWithClaims(jwt.SigningMethodHS256, accessTokenClaims)
-	accessTokenString, err := accessToken.SignedString([]byte(secret))
+	accessTokenString, err := s.createJWTToken(userID, accessTokenLifetime)
 	if err != nil {
 		return nil, err
 	}
 
-	accessTokenRecord := auth.AccessToken{
-		UserID:    userID,
-		Token:     accessTokenString,
-		ExpiresAt: accessTokenLifetime,
-	}
-	if err := helpers.InsertModel(&accessTokenRecord); err != nil {
-		return nil, err
-	}
-
-	// Refresh Token
-	refreshTokenClaims := jwt.MapClaims{
-		"user_id": userID,
-		"exp":     refreshTokenLifetime.Unix(),
-	}
-	refreshToken := jwt.NewWithClaims(jwt.SigningMethodHS256, refreshTokenClaims)
-	refreshTokenString, err := refreshToken.SignedString([]byte(secret))
+	refreshTokenString, err := s.createJWTToken(userID, refreshTokenLifetime)
 	if err != nil {
 		return nil, err
 	}
 
-	refreshTokenRecord := auth.RefreshToken{
-		UserID:        userID,
-		AccessTokenID: accessTokenRecord.ID,
-		Token:         refreshTokenString,
-		ExpiresAt:     refreshTokenLifetime,
-	}
-	if err := helpers.InsertModel(&refreshTokenRecord); err != nil {
+	// Simpan ke database via repository
+	err = s.authRepo.SaveTokens(userID, accessTokenString, accessTokenLifetime, refreshTokenString, refreshTokenLifetime)
+	if err != nil {
 		return nil, err
 	}
 
@@ -86,98 +103,60 @@ func (s *AuthService) GenerateTokens(userID int64) (*TokenResult, error) {
 	}, nil
 }
 
-// RefreshToken verifies and regenerates tokens if the refresh token is valid
-func (s *AuthService) RefreshToken(refreshTokenString string) (*TokenResult, error) {
-	secret := os.Getenv("JWT_SECRET")
-	if secret == "" {
-		return nil, fmt.Errorf("JWT secret is not set")
+func (s *AuthService) createJWTToken(userID int64, exp time.Time) (string, error) {
+	claims := jwt.MapClaims{
+		"user_id": userID,
+		"exp":     exp.Unix(),
 	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString([]byte(JWTSecret))
+}
 
-	parsedToken, err := jwt.Parse(refreshTokenString, func(token *jwt.Token) (interface{}, error) {
-		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, fmt.Errorf("unexpected signing method")
-		}
-		return []byte(secret), nil
-	})
-	if err != nil || !parsedToken.Valid {
+func (s *AuthService) RefreshToken(refreshTokenString string) (*TokenResult, error) {
+	userID, err := s.VerifyToken(refreshTokenString)
+	if err != nil {
 		return nil, fmt.Errorf("invalid or expired refresh token")
 	}
 
-	claims, ok := parsedToken.Claims.(jwt.MapClaims)
-	if !ok {
-		return nil, fmt.Errorf("invalid claims in token")
-	}
-
-	userIDFloat, ok := claims["user_id"].(float64)
-	if !ok {
-		return nil, fmt.Errorf("user_id is missing or invalid in token claims")
-	}
-	userID := int64(userIDFloat)
-
-	var refreshTokenRecord auth.RefreshToken
-	err = helpers.FindOneByField(&refreshTokenRecord, "token", refreshTokenString)
-	fmt.Println("Refresh token record:", err)
+	refreshTokenRecord, err := s.authRepo.FindRefreshToken(refreshTokenString)
 	if err != nil {
 		return nil, fmt.Errorf("refresh token not found")
 	}
-
 	if refreshTokenRecord.Claimed {
 		return nil, fmt.Errorf("refresh token already used")
 	}
 
-	// Generate new tokens
 	tokenResult, err := s.GenerateTokens(userID)
 	if err != nil {
 		return nil, err
 	}
 
-	// Tandai refresh token lama sebagai digunakan
-	refreshTokenRecord.Claimed = true
-	if err := helpers.UpdateModelByID(&refreshTokenRecord, refreshTokenRecord.ID); err != nil {
-		return nil, err
-	}
+	_ = s.authRepo.MarkRefreshTokenAsUsed(refreshTokenRecord.ID)
 
 	return tokenResult, nil
 }
 
-// RevokeToken marks a refresh token as claimed (used)
-func (s *AuthService) RevokeToken(token string) error {
-	var refreshToken auth.RefreshToken
-	err := helpers.FindOneByField(&refreshToken, "token", token)
-	if err != nil {
-		return fmt.Errorf("token not found: %v", err)
-	}
-
-	refreshToken.Claimed = true
-	return helpers.UpdateModelByID(&refreshToken, refreshToken.ID)
-}
-
-// VerifyToken verifies a JWT access token and returns the user ID if valid
-func (s *AuthService) VerifyToken(tokenString string) (uint, error) {
-	secret := os.Getenv("JWT_SECRET")
-	if secret == "" {
+func (s *AuthService) VerifyToken(tokenString string) (int64, error) {
+	if JWTSecret == "" {
 		return 0, fmt.Errorf("JWT secret is not set")
 	}
 
 	parsedToken, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, fmt.Errorf("unexpected signing method")
-		}
-		return []byte(secret), nil
+		return []byte(JWTSecret), nil
 	})
 	if err != nil || !parsedToken.Valid {
-		return 0, fmt.Errorf("invalid or expired token: %v", err)
+		return 0, fmt.Errorf("invalid or expired token")
 	}
 
 	claims, ok := parsedToken.Claims.(jwt.MapClaims)
 	if !ok {
-		return 0, fmt.Errorf("failed to parse claims")
+		return 0, fmt.Errorf("invalid claims")
 	}
 
 	userIDFloat, ok := claims["user_id"].(float64)
 	if !ok {
-		return 0, fmt.Errorf("user_id claim is missing or invalid")
+		return 0, fmt.Errorf("user_id missing in claims")
 	}
 
-	return uint(userIDFloat), nil
+	return int64(userIDFloat), nil
 }

@@ -3,14 +3,17 @@ package helpers
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"gin/src/configs/database"
 	"gin/src/utils/loggers"
 	"math"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/go-playground/validator/v10"
 	"gorm.io/gorm"
 )
 
@@ -26,10 +29,19 @@ type PaginationMeta struct {
 
 type Response struct {
 	Success bool        `json:"success"`
-	Message string      `json:"message"`
+	Message interface{} `json:"message"`
 	Data    interface{} `json:"data,omitempty"`
 	Meta    interface{} `json:"meta,omitempty"`
 	Links   interface{} `json:"links,omitempty"`
+}
+
+type ErrorData struct {
+	Error       interface{} `json:"error"`
+	Path        string      `json:"path"`
+	Method      string      `json:"method"`
+	ClientIP    string      `json:"clientIP"`
+	Status      int         `json:"status"`
+	RequestBody interface{} `json:"requestBody"`
 }
 
 // SuccessResponse sends a JSON response with a success status, a message, and the provided data.
@@ -156,21 +168,132 @@ func ErrorResponse(err error, ctx *gin.Context, httpCode ...int) {
 		requestData = formData
 	}
 
-	loggers.Log.Error("ErrorResponse: ", map[string]interface{}{
-		"error":       err.Error(),
-		"path":        ctx.FullPath(),
-		"method":      ctx.Request.Method,
-		"clientIP":    ctx.ClientIP(),
-		"status":      httpCode[0],
-		"requestBody": requestData,
-	})
+	// check apakah error validation atau error hardcode
+	message := ParseValidationError(err)
+
+	// Buat LogData dan panggil logError
+	logData := ErrorData{
+		Error:       message,
+		Path:        ctx.FullPath(),
+		Method:      ctx.Request.Method,
+		ClientIP:    ctx.ClientIP(),
+		Status:      httpCode[0],
+		RequestBody: requestData,
+	}
+
+	// Logging dengan logError
+	logError(logData)
 
 	webResponse := Response{
 		Success: false,
-		Message: err.Error(),
+		Message: message,
 		Data:    nil,
 	}
 	ctx.JSON(httpCode[0], webResponse)
+}
+
+func logError(data ErrorData) {
+	// Jika message adalah string JSON, coba unmarshal
+	if messageStr, ok := data.Error.(string); ok {
+		var unmarshalledMessage map[string]string
+		if err := json.Unmarshal([]byte(messageStr), &unmarshalledMessage); err == nil {
+			// Validasi berhasil di-unmarshal
+			loggers.Log.Error("Validation Error: ", map[string]interface{}{
+				"error":       unmarshalledMessage,
+				"path":        data.Path,
+				"method":      data.Method,
+				"clientIP":    data.ClientIP,
+				"status":      data.Status,
+				"requestBody": data.RequestBody,
+			})
+			return
+		}
+		// Gagal unmarshal JSON string
+		loggers.Log.Error("Validation Error Unmarshal Failed: ", map[string]interface{}{
+			"error":       messageStr,
+			"path":        data.Path,
+			"method":      data.Method,
+			"clientIP":    data.ClientIP,
+			"status":      data.Status,
+			"requestBody": data.RequestBody,
+		})
+		return
+	}
+
+	// Bukan string, langsung log biasa
+	loggers.Log.Error("ErrorResponse: ", map[string]interface{}{
+		"error":       data.Error,
+		"path":        data.Path,
+		"method":      data.Method,
+		"clientIP":    data.ClientIP,
+		"status":      data.Status,
+		"requestBody": data.RequestBody,
+	})
+}
+
+func FormatLogError(message interface{}, ctx *gin.Context, httpCode int, requestData interface{}) {
+	// Jika message adalah string JSON, coba unmarshal
+	if messageStr, ok := message.(string); ok {
+		var unmarshalledMessage map[string]string
+		if err := json.Unmarshal([]byte(messageStr), &unmarshalledMessage); err == nil {
+			// Log objek yang sudah di-unmarshal
+			loggers.Log.Error("Validation Error: ", map[string]interface{}{
+				"error":       unmarshalledMessage,
+				"path":        ctx.FullPath(),
+				"method":      ctx.Request.Method,
+				"clientIP":    ctx.ClientIP(),
+				"status":      httpCode,
+				"requestBody": requestData,
+			})
+		} else {
+			// Jika gagal unmarshal, log sebagai string biasa
+			loggers.Log.Error("Validation Error Unmarshal Failed: ", map[string]interface{}{
+				"error":       messageStr,
+				"path":        ctx.FullPath(),
+				"method":      ctx.Request.Method,
+				"clientIP":    ctx.ClientIP(),
+				"status":      httpCode,
+				"requestBody": requestData,
+			})
+		}
+	} else {
+		// Jika bukan error validasi, log error biasa
+		loggers.Log.Error("ErrorResponse: ", map[string]interface{}{
+			"error":       message,
+			"path":        ctx.FullPath(),
+			"method":      ctx.Request.Method,
+			"clientIP":    ctx.ClientIP(),
+			"status":      httpCode,
+			"requestBody": requestData,
+		})
+	}
+}
+
+func ParseValidationError(err error) interface{} {
+	var ve validator.ValidationErrors
+	var message interface{}
+
+	if errors.As(err, &ve) {
+		errorMap := map[string]string{}
+		for _, fe := range ve {
+			field := strings.ToLower(fe.Field())
+			switch fe.Tag() {
+			case "required":
+				errorMap[field] = fmt.Sprintf("%s is required", field)
+			case "email":
+				errorMap[field] = fmt.Sprintf("%s must be a valid email", field)
+			case "min":
+				errorMap[field] = fmt.Sprintf("%s must be at least %s characters", field, fe.Param())
+			default:
+				errorMap[field] = fmt.Sprintf("%s is invalid", field)
+			}
+		}
+		// Convert errorMap menjadi JSON string
+		jsonMessage, _ := json.Marshal(errorMap)
+		message = string(jsonMessage) // convert map ke string
+		return message
+	}
+	return err.Error()
 }
 
 // JSONResponse handles sending the JSON response with the correct status code

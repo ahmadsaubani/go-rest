@@ -28,7 +28,8 @@ func init() {
 }
 
 func NewLogger() *Logger {
-	logDir := "storage/logs"
+	logDir := "src/storage/logs"
+
 	if _, err := os.Stat(logDir); os.IsNotExist(err) {
 		_ = os.MkdirAll(logDir, os.ModePerm)
 	}

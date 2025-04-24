@@ -50,12 +50,12 @@ func DdLog(data ...interface{}) {
 	}
 
 	// Create log folder if not exists
-	if _, err := os.Stat("storage/logs"); os.IsNotExist(err) {
+	if _, err := os.Stat("src/storage/logs"); os.IsNotExist(err) {
 		os.Mkdir("logs", os.ModePerm)
 	}
 
 	// Get today's date for file name
-	filename := fmt.Sprintf("storage/logs/%s.log", time.Now().Format("2006-01-02"))
+	filename := fmt.Sprintf("src/storage/logs/%s.log", time.Now().Format("2006-01-02"))
 	file, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		fmt.Println("Failed to open log file:", err)
@@ -81,12 +81,12 @@ func DumpLog(data ...interface{}) {
 	}
 
 	// Pastikan folder logs ada
-	if _, err := os.Stat("storage/logs"); os.IsNotExist(err) {
+	if _, err := os.Stat("src/storage/logs"); os.IsNotExist(err) {
 		os.Mkdir("logs", os.ModePerm)
 	}
 
 	// Nama file log berdasarkan tanggal
-	filename := fmt.Sprintf("storage/logs/%s.log", time.Now().Format("2006-01-02"))
+	filename := fmt.Sprintf("src/storage/logs/%s.log", time.Now().Format("2006-01-02"))
 	file, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		fmt.Println("Failed to open log file:", err)
