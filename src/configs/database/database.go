@@ -27,7 +27,7 @@ func ConnectDatabase() *DBConnection {
 
 	// Load .env
 	if err := godotenv.Load(); err != nil {
-		fmt.Println("⚠️ Warning: .env file not found")
+		fmt.Println("⚠️ Warning: .env file not found:%w", err)
 	}
 
 	useGorm := os.Getenv("USE_GORM") == "true"
