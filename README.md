@@ -30,9 +30,14 @@ myapp/
 │   ├── seeders/
 │   │   └── user_seeders/
 │   │       └── user_seeder.go
+│   ├── repositories/
+│   │   ├── auth_repositories/
+│   │   │   └── auth_repository_interface.go
+│   │   │   └── auth_repository.go
 │   ├── services/
-│   │   └── auth_services/
-│   │       └── auth_service.go
+│   │   ├── auth_services/
+│   │   │   └── auth_service_interface.go
+│   │   │   └── auth_service.go
 │   ├── utils/
 │   │   └── loggers/
 │   │       └── logger.go
