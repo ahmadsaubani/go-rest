@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"gin/src/entities/users"
 	"gin/src/helpers"
+	services "gin/src/services/user_services"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -35,75 +36,29 @@ func GetProfile(ctx *gin.Context) {
 	helpers.SuccessResponse(ctx, "Data Found!", response)
 }
 
-// func GetAllUsers(ctx *gin.Context) {
-// 	// Extract pagination parameters from query string
-// 	page, limit, offset := helpers.GetPaginationParams(ctx)
+func GetAllUsers(service services.UserService) gin.HandlerFunc {
+	return func(ctx *gin.Context) {
+		page, limit, offset := helpers.GetPaginationParams(ctx)
 
-// 	// var usersList []users.User
-// 	var total int64
+		userList, total, err := service.GetPaginatedUsers(limit, offset, "created_at DESC")
+		if err != nil {
+			helpers.ErrorResponse(err, ctx, http.StatusInternalServerError)
+			return
+		}
 
-// 	// Get total count of users
-// 	database.DB.Model(&users.User{}).Count(&total)
+		var response []users.ProfileResponse
+		for _, u := range userList {
+			response = append(response, users.ProfileResponse{
+				ID:       u.ID,
+				Email:    u.Email,
+				Username: u.Username,
+			})
+		}
 
-// 	// Retrieve users with pagination and ordering
-// 	var usersList []users.User
-// 	database.DB.
-// 		Limit(limit).
-// 		Offset(offset).
-// 		Order("created_at desc").
-// 		Find(&usersList)
-
-// 	// Convert to response struct
-// 	var profileResponses []users.ProfileResponse
-// 	for _, user := range usersList {
-// 		profileResponses = append(profileResponses, users.ProfileResponse{
-// 			ID:       user.ID,
-// 			Email:    user.Email,
-// 			Username: user.Username,
-// 		})
-// 	}
-
-// 	// Return consistent structure (empty array if nothing found)
-// 	if len(profileResponses) == 0 {
-// 		profileResponses = []users.ProfileResponse{}
-// 	}
-
-// 	// Send success response with pagination
-// 	helpers.SuccessResponse(ctx, "Data Found!", profileResponses, helpers.PaginationMeta{
-// 		Page:  page,
-// 		Limit: limit,
-// 		Total: total,
-// 	})
-// }
-
-func GetAllUsers(ctx *gin.Context) {
-	page, limit, offset := helpers.GetPaginationParams(ctx)
-	var usersList []users.User
-
-	total, err := helpers.CountModel[users.User]()
-	if err != nil {
-		helpers.ErrorResponse(err, ctx, http.StatusInternalServerError)
-		return
-	}
-
-	err = helpers.GetAllModels(&usersList, limit, offset, "created_at DESC")
-	if err != nil {
-		helpers.ErrorResponse(err, ctx, http.StatusInternalServerError)
-		return
-	}
-
-	var response []users.ProfileResponse
-	for _, u := range usersList {
-		response = append(response, users.ProfileResponse{
-			ID:       u.ID,
-			Email:    u.Email,
-			Username: u.Username,
+		helpers.SuccessResponse(ctx, "Data found!", response, helpers.PaginationMeta{
+			Page:  page,
+			Limit: limit,
+			Total: total,
 		})
 	}
-
-	helpers.SuccessResponse(ctx, "Data Found!", response, helpers.PaginationMeta{
-		Page:  page,
-		Limit: limit,
-		Total: total,
-	})
 }

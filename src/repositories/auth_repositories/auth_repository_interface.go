@@ -8,7 +8,7 @@ import (
 )
 
 type AuthRepositoryInterface interface {
-	Register(ctx context.Context) (map[string]interface{}, error)
+	Register(ctx context.Context, email string, username string, password string) (map[string]interface{}, error)
 	FindByEmail(email string) (*users.User, error)
 	FindByUsername(username string) (*users.User, error)
 	CreateUser(user *users.User) error

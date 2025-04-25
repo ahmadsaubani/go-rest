@@ -36,22 +36,15 @@ type TokenResult struct {
 }
 
 // Register handles the registration logic
-func (s *AuthService) Register(ctx context.Context) (interface{}, error) {
-
-	// Call repository to perform the actual registration
-	response, err := s.authRepo.Register(ctx)
+func (s *AuthService) Register(ctx context.Context, email string, username string, password string) (map[string]interface{}, error) {
+	response, err := s.authRepo.Register(ctx, email, username, password)
 	if err != nil {
 		return nil, fmt.Errorf("could not register user: %w", err)
 	}
-
-	// Return the response from repository (already processed in the repository)
 	return response, nil
 }
 
-func (s *AuthService) Login(ctx context.Context) (gin.H, error) {
-	// Mengambil email dan password dari context
-	email := ctx.Value("email").(string)
-	password := ctx.Value("password").(string)
+func (s *AuthService) Login(ctx context.Context, email string, password string) (gin.H, error) {
 
 	user, err := s.authRepo.FindByEmail(email)
 	if err != nil {
@@ -59,12 +52,12 @@ func (s *AuthService) Login(ctx context.Context) (gin.H, error) {
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
-		return nil, fmt.Errorf("invalid password")
+		return nil, fmt.Errorf("invalid password: %w", err)
 	}
 
 	tokens, err := s.GenerateTokens(user.ID)
 	if err != nil {
-		return nil, fmt.Errorf("could not generate tokens: %w", err)
+		return nil, fmt.Errorf("failed generate tokens: %w", err)
 	}
 
 	return gin.H{
@@ -83,18 +76,18 @@ func (s *AuthService) GenerateTokens(userID int64) (*TokenResult, error) {
 
 	accessTokenString, err := s.createJWTToken(userID, accessTokenLifetime)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create JWT token for access token: %w", err)
 	}
 
 	refreshTokenString, err := s.createJWTToken(userID, refreshTokenLifetime)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create JWT token for refresh token: %w", err)
 	}
 
 	// Simpan ke database via repository
 	err = s.authRepo.SaveTokens(userID, accessTokenString, accessTokenLifetime, refreshTokenString, refreshTokenLifetime)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("save token to database error: %w", err)
 	}
 
 	return &TokenResult{
@@ -114,25 +107,25 @@ func (s *AuthService) createJWTToken(userID int64, exp time.Time) (string, error
 	return token.SignedString([]byte(getJWTSecret()))
 }
 
-func (s *AuthService) RefreshToken(ctx context.Context) (*TokenResult, error) {
-	refreshTokenString := ctx.Value("refresh_token").(string)
+func (s *AuthService) RefreshToken(ctx context.Context, refreshTokenString string) (*TokenResult, error) {
 
 	userID, err := s.VerifyToken(refreshTokenString)
 	if err != nil {
-		return nil, fmt.Errorf("invalid or expired refresh token")
+		return nil, fmt.Errorf("invalid or expired refresh token: %w", err)
 	}
 
 	refreshTokenRecord, err := s.authRepo.FindRefreshToken(refreshTokenString)
 	if err != nil {
-		return nil, fmt.Errorf("refresh token not found")
+		return nil, fmt.Errorf("refresh token not found: %w", err)
+
 	}
 	if refreshTokenRecord.Claimed {
-		return nil, fmt.Errorf("refresh token already used")
+		return nil, fmt.Errorf("refresh token already claimed and used: %w", err)
 	}
 
 	tokenResult, err := s.GenerateTokens(userID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error generate tokens: %w", err)
 	}
 
 	_ = s.authRepo.MarkRefreshTokenAsUsed(refreshTokenRecord.ID)
@@ -146,17 +139,17 @@ func (s *AuthService) VerifyToken(tokenString string) (int64, error) {
 		return []byte(getJWTSecret()), nil
 	})
 	if err != nil || !parsedToken.Valid {
-		return 0, fmt.Errorf("invalid or expired token")
+		return 0, fmt.Errorf("invalid or expired token: %w", err)
 	}
 
 	claims, ok := parsedToken.Claims.(jwt.MapClaims)
 	if !ok {
-		return 0, fmt.Errorf("invalid claims")
+		return 0, fmt.Errorf("invalid claims format, expected jwt.MapClaims, got: %T. Claims: %v", parsedToken.Claims, claims)
 	}
 
 	userIDFloat, ok := claims["user_id"].(float64)
 	if !ok {
-		return 0, fmt.Errorf("user_id missing in claims")
+		return 0, fmt.Errorf("user_id missing in claims or not a float64, claims: %v", claims)
 	}
 
 	return int64(userIDFloat), nil

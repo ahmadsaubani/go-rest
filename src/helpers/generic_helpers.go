@@ -204,7 +204,7 @@ func scanRowIntoStruct[T any](row *sql.Row, model *T) error {
 	// return row.Scan(dest...)
 	err := row.Scan(dest...)
 	if errors.Is(err, sql.ErrNoRows) {
-		return fmt.Errorf("record not found")
+		return fmt.Errorf("record not found for id %v", model)
 	}
 	if err != nil {
 		return fmt.Errorf("scan error: %w", err)

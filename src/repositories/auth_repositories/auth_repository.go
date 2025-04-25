@@ -18,19 +18,15 @@ func NewAuthRepository() *authRepository {
 }
 
 // Register handles the actual logic of saving a new user to the database
-func (r *authRepository) Register(ctx context.Context) (map[string]interface{}, error) {
-	// Ambil data dari context
-	email, _ := ctx.Value("email").(string)
-	username, _ := ctx.Value("username").(string)
-	password, _ := ctx.Value("password").(string)
+func (r *authRepository) Register(ctx context.Context, email string, username string, password string) (map[string]interface{}, error) {
 
 	// Check if the email is already in use
 	if _, err := r.FindByEmail(email); err == nil {
-		return nil, fmt.Errorf("email already in use")
+		return nil, fmt.Errorf("email already in use %w", err)
 	}
 
 	if _, err := r.FindByUsername(username); err == nil {
-		return nil, fmt.Errorf("Username already in use")
+		return nil, fmt.Errorf("username already in use %w", err)
 	}
 
 	// Hash password

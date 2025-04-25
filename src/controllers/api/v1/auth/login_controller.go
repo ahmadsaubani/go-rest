@@ -1,7 +1,6 @@
 package auth
 
 import (
-	"context"
 	"fmt"
 	"gin/src/helpers"
 	"gin/src/services/auth_services"
@@ -27,16 +26,11 @@ func Login(authService auth_services.AuthServiceInterface) gin.HandlerFunc {
 
 		var input LoginRequest
 		if err := ctx.ShouldBind(&input); err != nil {
-			helpers.ErrorResponse(fmt.Errorf("Invalid input: %w", err), ctx, http.StatusBadRequest)
+			helpers.ErrorResponse(fmt.Errorf("invalid input: %v", err), ctx, http.StatusBadRequest)
 			return
 		}
-
-		// Menggunakan context untuk menyimpan email dan password
-		requestCtx = context.WithValue(requestCtx, "email", input.Email)
-		requestCtx = context.WithValue(requestCtx, "password", input.Password)
-
 		// Memanggil service untuk login
-		response, err := authService.Login(requestCtx)
+		response, err := authService.Login(requestCtx, input.Email, input.Password)
 		if err != nil {
 			helpers.ErrorResponse(err, ctx, http.StatusUnauthorized)
 			return
@@ -54,15 +48,12 @@ func RefreshToken(authService auth_services.AuthServiceInterface) gin.HandlerFun
 
 		var body RefreshTokenRequest
 		if err := ctx.ShouldBind(&body); err != nil {
-			helpers.ErrorResponse(fmt.Errorf("Invalid input: %w", err), ctx, http.StatusBadRequest)
+			helpers.ErrorResponse(fmt.Errorf("invalid input: %v", err), ctx, http.StatusBadRequest)
 			return
 		}
 
-		// Menyimpan refresh token ke context
-		requestCtx = context.WithValue(requestCtx, "refresh_token", body.RefreshToken)
-
 		// Memanggil service untuk refresh token
-		tokenResult, err := authService.RefreshToken(requestCtx)
+		tokenResult, err := authService.RefreshToken(requestCtx, body.RefreshToken)
 		if err != nil {
 			helpers.ErrorResponse(fmt.Errorf("%w", err), ctx, http.StatusInternalServerError)
 			return

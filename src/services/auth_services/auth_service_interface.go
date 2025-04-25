@@ -7,9 +7,9 @@ import (
 )
 
 type AuthServiceInterface interface {
-	Register(ctx context.Context) (interface{}, error)
-	Login(ctx context.Context) (gin.H, error)
+	Register(ctx context.Context, email string, username string, password string) (map[string]interface{}, error)
+	Login(ctx context.Context, email string, password string) (gin.H, error)
 	GenerateTokens(userID int64) (*TokenResult, error)
-	RefreshToken(ctx context.Context) (*TokenResult, error)
+	RefreshToken(ctx context.Context, refreshTokenString string) (*TokenResult, error)
 	VerifyToken(token string) (int64, error)
 }

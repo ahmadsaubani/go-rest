@@ -6,7 +6,9 @@ import (
 	"gin/src/controllers/api/v1/user"
 	"gin/src/middleware"
 	"gin/src/repositories/auth_repositories"
+	repositories "gin/src/repositories/user_repositories"
 	"gin/src/services/auth_services"
+	services "gin/src/services/user_services"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -20,6 +22,10 @@ func API(db *database.DBConnection) *gin.Engine {
 
 	authRepo := auth_repositories.NewAuthRepository()
 	authService := auth_services.NewAuthService(authRepo)
+
+	userRepo := repositories.NewUserRepository()
+	userService := services.NewUserService(userRepo)
+
 	v1 := r.Group("/api/v1")
 	{
 		v1.GET("/ping", func(context *gin.Context) {
@@ -34,7 +40,7 @@ func API(db *database.DBConnection) *gin.Engine {
 		v1.Use(middleware.JWTAuthMiddleware())
 		{
 			v1.GET("/user/profile", user.GetProfile)
-			v1.GET("/users", user.GetAllUsers)
+			v1.GET("/users", user.GetAllUsers(userService))
 
 			v1.POST("/token/refresh", auth.RefreshToken(authService))
 		}
