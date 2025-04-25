@@ -1,4 +1,22 @@
 
+# 🛠️ Project Overview
+This project is my first step into learning Go (Golang). I created this boilerplate as a starting point to help me build Go projects more easily in the future. It’s designed to be clean, reusable, and flexible so I don’t have to start from scratch every time I create a new project.
+
+🔧 Key Features:
+- Flexible database support: Seamless switch between GORM and native SQL based on environment configuration.
+
+- Clean architecture: Organized into controllers, services, repositories, and helpers for maintainability and testability.
+
+- Dynamic filtering & pagination: Robust support for API query filtering (e.g., ?name[like]=john) and paginated responses.
+
+- Built-in support for PostgreSQL and MySQL: Compatible with both major relational databases, including smart placeholder formatting.
+
+- Migration-friendly: Struct-based migration helpers that generate CREATE TABLE statements and triggers automatically.
+
+🎯 Purpose & Vision:
+This boilerplate is more than just a practice project—it's a tool I plan to grow with. I want to write clean and easy-to-maintain Go code from the start. As I build more apps, I’ll keep improving this project with better structure, tools, and performance.
+---
+
 ## Getting Started
 1. **Clone the repository**:
 ```bash
@@ -86,13 +104,6 @@ myapp/
 
 
 ```
-
-# Project Overview
-
-This Go-based project is designed to provide an API with authentication and user management functionalities. The project is structured to include components for handling database connections, seeding data, authentication logic, middleware, and utilities like logging. Below is the description of the project's folder structure and its contents.
-
----
-
 ## Folder Structure
 
 ### **1. `src/`**
