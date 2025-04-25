@@ -18,6 +18,23 @@ How to run :
 - run gowatch or go main.go
 ```
 
+3. **List Endpoint**:
+```sh
+GET    /api/v1/ping             
+POST   /api/v1/user/register    
+POST   /api/v1/user/login       
+GET    /api/v1/user/profile     
+GET    /api/v1/users            
+POST   /api/v1/token/refresh     
+POST   /api/v1/user/logout       
+```
+
+4. **Filter Usage**:
+```sh
+Example :
+1. /api/v1/users?email[like]=%john%&age[moreThan]=18&page=1&per_page=10
+```
+
 #### STRUCTURE PROJECT
 ```sh
 myapp/

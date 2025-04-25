@@ -5,11 +5,15 @@ import (
 	"errors"
 	"fmt"
 	"gin/src/configs/database"
+	"gin/src/utils/filters"
 	"log"
+	"os"
 	"reflect"
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/gin-gonic/gin"
 )
 
 type Tabler interface {
@@ -106,32 +110,103 @@ func InsertModel[T any](model *T) error {
 	return database.SQLDB.QueryRow(query, values...).Scan(primaryKeyField.Addr().Interface())
 }
 
-func GetAllModels[T any](models *[]T, limit, offset int, orderBy string) error {
-	if database.GormDB != nil {
+// func GetAllModels[T any](models *[]T, limit, offset int, orderBy string) error {
+// 	if database.GormDB != nil {
+// 		query := database.GormDB.Limit(limit).Offset(offset)
+// 		if orderBy != "" {
+// 			query = query.Order(orderBy)
+// 		}
+// 		return query.Find(models).Error
+// 	}
+
+// 	if database.SQLDB == nil {
+// 		return sql.ErrConnDone
+// 	}
+
+// 	// SQL native
+// 	var model T
+// 	table := GetTableName(&model)
+
+// 	query := fmt.Sprintf("SELECT * FROM %s", table)
+
+// 	if orderBy != "" {
+// 		query += fmt.Sprintf(" ORDER BY %s", orderBy)
+// 	}
+
+// 	query += fmt.Sprintf(" LIMIT %d OFFSET %d", limit, offset)
+
+// 	rows, err := database.SQLDB.Query(query)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	defer rows.Close()
+
+// 	for rows.Next() {
+// 		var item T
+// 		dest, err := scanRowDestinations(&item)
+// 		if err != nil {
+// 			return err
+// 		}
+// 		if err := rows.Scan(dest...); err != nil {
+// 			return err
+// 		}
+// 		*models = append(*models, item)
+// 	}
+
+// 	return nil
+// }
+
+func GetAllModels[T any](ctx *gin.Context, models *[]T, limit, offset int, orderBy string) error {
+	useGORM := os.Getenv("USE_GORM") == "true"
+	if useGORM {
+		useGORM = true
+	} else {
+		useGORM = false
+	}
+
+	// GORM
+	if useGORM && database.GormDB != nil {
 		query := database.GormDB.Limit(limit).Offset(offset)
+
 		if orderBy != "" {
 			query = query.Order(orderBy)
 		}
+
+		// Bangun filter dari query string
+		whereClause, args, err := filters.BuildFilters(ctx, true)
+		if err != nil {
+			return err
+		}
+		if whereClause != "" {
+			query = query.Where(whereClause, args...)
+		}
+
 		return query.Find(models).Error
 	}
 
+	// Native SQL
 	if database.SQLDB == nil {
 		return sql.ErrConnDone
 	}
 
-	// SQL native
 	var model T
 	table := GetTableName(&model)
-
 	query := fmt.Sprintf("SELECT * FROM %s", table)
+
+	whereClause, args, err := filters.BuildFilters(ctx, false)
+	if err != nil {
+		return err
+	}
+	if whereClause != "" {
+		query += " WHERE " + whereClause
+	}
 
 	if orderBy != "" {
 		query += fmt.Sprintf(" ORDER BY %s", orderBy)
 	}
-
 	query += fmt.Sprintf(" LIMIT %d OFFSET %d", limit, offset)
 
-	rows, err := database.SQLDB.Query(query)
+	rows, err := database.SQLDB.Query(query, args...)
 	if err != nil {
 		return err
 	}
@@ -141,10 +216,10 @@ func GetAllModels[T any](models *[]T, limit, offset int, orderBy string) error {
 		var item T
 		dest, err := scanRowDestinations(&item)
 		if err != nil {
-			return err
+			return fmt.Errorf("error scanning row destinations: %w", err)
 		}
 		if err := rows.Scan(dest...); err != nil {
-			return err
+			return fmt.Errorf("error scanning row: %w", err)
 		}
 		*models = append(*models, item)
 	}

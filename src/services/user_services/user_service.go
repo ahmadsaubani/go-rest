@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"gin/src/entities/users"
 	repositories "gin/src/repositories/user_repositories"
+
+	"github.com/gin-gonic/gin"
 )
 
 type UserService interface {
-	GetPaginatedUsers(limit, offset int, order string) ([]users.User, int64, error)
+	GetPaginatedUsers(ctx *gin.Context, limit int, offset int, order string) ([]users.User, int64, error)
 }
 
 type userService struct {
@@ -18,8 +20,8 @@ func NewUserService(repo repositories.UserRepository) UserService {
 	return &userService{repo}
 }
 
-func (s *userService) GetPaginatedUsers(limit, offset int, order string) ([]users.User, int64, error) {
-	usersList, err := s.repo.GetAll(limit, offset, order)
+func (s *userService) GetPaginatedUsers(ctx *gin.Context, limit int, offset int, order string) ([]users.User, int64, error) {
+	usersList, err := s.repo.GetAll(ctx, limit, offset, order)
 	if err != nil {
 		return nil, 0, fmt.Errorf("sorry, we encountered an issue fetching the user list. Please try again later: %w", err)
 	}

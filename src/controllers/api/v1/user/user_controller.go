@@ -38,7 +38,7 @@ func GetAllUsers(service services.UserService) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		page, limit, offset := helpers.GetPaginationParams(ctx)
 
-		userList, total, err := service.GetPaginatedUsers(limit, offset, "created_at DESC")
+		userList, total, err := service.GetPaginatedUsers(ctx, limit, offset, "created_at DESC")
 		if err != nil {
 			helpers.ErrorResponse(ctx, err, http.StatusInternalServerError)
 			return
