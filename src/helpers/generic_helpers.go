@@ -196,21 +196,58 @@ func scanRowIntoStruct[T any](row *sql.Row, model *T) error {
 	var dest []any
 	for i := 0; i < elem.NumField(); i++ {
 		field := elem.Field(i)
+		structField := elem.Type().Field(i)
+
+		dbTag := structField.Tag.Get("db")
+		if dbTag == "-" || dbTag == "" {
+			continue // skip fields not mapped to DB
+		}
+
 		if field.CanSet() {
 			dest = append(dest, field.Addr().Interface())
 		}
 	}
 
-	// return row.Scan(dest...)
 	err := row.Scan(dest...)
 	if errors.Is(err, sql.ErrNoRows) {
-		return fmt.Errorf("record not found for id %v", model)
+		return fmt.Errorf("record not found for %T", model)
 	}
 	if err != nil {
 		return fmt.Errorf("scan error: %w", err)
 	}
 
 	return nil
+}
+
+func UpdateModelByIDWithMap[T any](updatedFields map[string]interface{}, id any) error {
+	if database.GormDB != nil {
+		// Menggunakan new(T) untuk memberikan tipe eksplisit ke GORM
+		// Dengan new(T), kita bisa memastikan bahwa tipe tersebut sesuai
+		return database.GormDB.Model(new(T)).Where("id = ?", id).Updates(updatedFields).Error
+	}
+
+	if database.SQLDB == nil {
+		return sql.ErrConnDone
+	}
+
+	// Menggunakan refleksi untuk mendapatkan nama tabel dengan tipe eksplisit
+	table := GetTableName(new(T)) // new(T) memberikan tipe eksplisit
+
+	var sets []string
+	var values []any
+
+	// Memproses map field untuk SQL update
+	for column, value := range updatedFields {
+		sets = append(sets, fmt.Sprintf("%s = $%d", column, len(values)+1))
+		values = append(values, value)
+	}
+
+	// Membuat query untuk update
+	query := fmt.Sprintf("UPDATE %s SET %s WHERE id = $%d", table, strings.Join(sets, ", "), len(values)+1)
+	values = append(values, id)
+
+	_, err := database.SQLDB.Exec(query, values...)
+	return err
 }
 
 func UpdateModelByID[T any](model *T, id any) error {
@@ -274,9 +311,19 @@ func DeleteModelByID[T any](model *T, id any) error {
 	return err
 }
 
-func FindOneByField[T any](model *T, field string, value any) error {
+func FindOneByField[T any](model *T, conditions ...any) error {
+	if len(conditions)%2 != 0 {
+		return fmt.Errorf("conditions must be in key-value pairs")
+	}
+
 	if database.GormDB != nil {
-		return database.GormDB.Where(fmt.Sprintf("%s = ?", field), value).First(model).Error
+		query := database.GormDB
+		for i := 0; i < len(conditions); i += 2 {
+			field := conditions[i].(string)
+			value := conditions[i+1]
+			query = query.Where(fmt.Sprintf("%s = ?", field), value)
+		}
+		return query.First(model).Error
 	}
 
 	if database.SQLDB == nil {
@@ -284,9 +331,22 @@ func FindOneByField[T any](model *T, field string, value any) error {
 	}
 
 	table := GetTableName(model)
-	fmt.Println("Table name:", table)
-	query := fmt.Sprintf("SELECT * FROM %s WHERE %s = $1 LIMIT 1", table, field)
-	row := database.SQLDB.QueryRow(query, value)
+	whereClause := ""
+	args := []any{}
+
+	for i := 0; i < len(conditions); i += 2 {
+		field := conditions[i].(string)
+		value := conditions[i+1]
+		if i > 0 {
+			whereClause += " AND "
+		}
+		whereClause += fmt.Sprintf("%s = $%d", field, (i/2)+1)
+		args = append(args, value)
+	}
+
+	query := fmt.Sprintf("SELECT * FROM %s WHERE %s LIMIT 1", table, whereClause)
+
+	row := database.SQLDB.QueryRow(query, args...)
 
 	return scanRowIntoStruct(row, model)
 }

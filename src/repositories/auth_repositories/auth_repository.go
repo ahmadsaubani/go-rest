@@ -6,6 +6,7 @@ import (
 	"gin/src/entities/auth"
 	"gin/src/entities/users"
 	"gin/src/helpers"
+	"strings"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
@@ -62,7 +63,8 @@ func (r *authRepository) FindByEmail(email string) (*users.User, error) {
 	// Menggunakan helper untuk mencari user berdasarkan email
 	err := helpers.FindOneByField(&user, "email", email)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("email not found: %w", err)
+
 	}
 	return &user, nil
 }
@@ -71,7 +73,7 @@ func (r *authRepository) FindByUsername(username string) (*users.User, error) {
 	var user users.User
 	err := helpers.FindOneByField(&user, "username", username)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("username not found: %w", err)
 	}
 	return &user, nil
 }
@@ -87,7 +89,7 @@ func (r *authRepository) SaveTokens(userID int64, accessToken string, accessExp 
 		ExpiresAt: accessExp,
 	}
 	if err := helpers.InsertModel(&access); err != nil {
-		return err
+		return fmt.Errorf("failed insert access token: %w", err)
 	}
 
 	refresh := auth.RefreshToken{
@@ -102,7 +104,7 @@ func (r *authRepository) SaveTokens(userID int64, accessToken string, accessExp 
 func (r *authRepository) FindRefreshToken(token string) (*auth.RefreshToken, error) {
 	var refresh auth.RefreshToken
 	if err := helpers.FindOneByField(&refresh, "token", token); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("token not found: %w", err)
 	}
 	return &refresh, nil
 }
@@ -112,4 +114,28 @@ func (r *authRepository) MarkRefreshTokenAsUsed(id int64) error {
 		Claimed: true,
 	}
 	return helpers.UpdateModelByID(&refresh, id)
+}
+
+// MarkTokenAsRevoked menandai token sebagai revoked di database
+func (r *authRepository) MarkTokenAsRevoked(tokenID int64) error {
+	// Buat map dengan field yang ingin diupdate
+	updatedFields := map[string]interface{}{
+		"revoked": true, // Hanya field revoked yang diupdate
+	}
+
+	// Panggil helper untuk update berdasarkan ID dan field yang ingin diupdate
+	// Kita memastikan tipe model yang digunakan eksplisit
+	return helpers.UpdateModelByIDWithMap[auth.AccessToken](updatedFields, tokenID)
+}
+
+// FindTokenByUserIDAndToken mencari token berdasarkan user_id dan token string
+func (r *authRepository) FindTokenByUserIDAndToken(userID int64, tokenString string) (*auth.AccessToken, error) {
+	var token auth.AccessToken
+	tokenString = strings.TrimSpace(tokenString)
+	// Menggunakan helper untuk mencari token berdasarkan user_id dan token string
+	err := helpers.FindOneByField(&token, "user_id", userID, "token", tokenString, "revoked", false)
+	if err != nil {
+		return nil, fmt.Errorf("token not found or already revoked: %w", err)
+	}
+	return &token, nil
 }

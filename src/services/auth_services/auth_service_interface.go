@@ -12,4 +12,5 @@ type AuthServiceInterface interface {
 	GenerateTokens(userID int64) (*TokenResult, error)
 	RefreshToken(ctx context.Context, refreshTokenString string) (*TokenResult, error)
 	VerifyToken(token string) (int64, error)
+	RevokeToken(ctx context.Context, tokenString string) error
 }

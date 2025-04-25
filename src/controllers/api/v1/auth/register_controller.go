@@ -21,14 +21,14 @@ func Register(authService auth_services.AuthServiceInterface) gin.HandlerFunc {
 
 		// Bind the request body to struct
 		if err := ctx.ShouldBind(&body); err != nil {
-			helpers.ErrorResponse(err, ctx, http.StatusBadRequest)
+			helpers.ErrorResponse(ctx, err, http.StatusBadRequest)
 			return
 		}
 
 		// Call service to register the user
 		response, err := authService.Register(requestCtx, body.Email, body.Username, body.Password)
 		if err != nil {
-			helpers.ErrorResponse(err, ctx, http.StatusBadRequest)
+			helpers.ErrorResponse(ctx, err, http.StatusBadRequest)
 			return
 		}
 

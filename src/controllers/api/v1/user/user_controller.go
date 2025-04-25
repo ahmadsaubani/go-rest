@@ -1,7 +1,6 @@
 package user
 
 import (
-	"fmt"
 	"gin/src/entities/users"
 	"gin/src/helpers"
 	services "gin/src/services/user_services"
@@ -22,8 +21,7 @@ func GetProfile(ctx *gin.Context) {
 	// Find user by ID
 	var user users.User
 	if err := helpers.GetModelByID(&user, userID); err != nil {
-		fmt.Println(err)
-		helpers.ErrorResponse(err, ctx, http.StatusNotFound)
+		helpers.ErrorResponse(ctx, err, http.StatusNotFound)
 		return
 	}
 
@@ -42,7 +40,7 @@ func GetAllUsers(service services.UserService) gin.HandlerFunc {
 
 		userList, total, err := service.GetPaginatedUsers(limit, offset, "created_at DESC")
 		if err != nil {
-			helpers.ErrorResponse(err, ctx, http.StatusInternalServerError)
+			helpers.ErrorResponse(ctx, err, http.StatusInternalServerError)
 			return
 		}
 

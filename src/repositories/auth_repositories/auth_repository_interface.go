@@ -15,4 +15,6 @@ type AuthRepositoryInterface interface {
 	SaveTokens(userID int64, accessToken string, accessExp time.Time, refreshToken string, refreshExp time.Time) error
 	FindRefreshToken(token string) (*auth.RefreshToken, error)
 	MarkRefreshTokenAsUsed(id int64) error
+	MarkTokenAsRevoked(tokenID int64) error
+	FindTokenByUserIDAndToken(userID int64, tokenString string) (*auth.AccessToken, error)
 }

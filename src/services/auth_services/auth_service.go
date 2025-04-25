@@ -154,3 +154,27 @@ func (s *AuthService) VerifyToken(tokenString string) (int64, error) {
 
 	return int64(userIDFloat), nil
 }
+
+func (s *AuthService) RevokeToken(ctx context.Context, tokenString string) error {
+
+	// Verifikasi apakah token yang diberikan valid
+	userID, err := s.VerifyToken(tokenString)
+	if err != nil {
+		return fmt.Errorf("invalid or expired token: %w", err)
+	}
+
+	// Cari token dalam database
+	tokenRecord, err := s.authRepo.FindTokenByUserIDAndToken(userID, tokenString)
+
+	if err != nil {
+		return fmt.Errorf("token not found: %w", err)
+	}
+
+	// Tandai token sebagai revoked
+	err = s.authRepo.MarkTokenAsRevoked(tokenRecord.ID)
+	if err != nil {
+		return fmt.Errorf("failed to mark token as revoked: %w", err)
+	}
+
+	return nil
+}

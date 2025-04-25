@@ -148,7 +148,7 @@ func buildPaginationLink(ctx *gin.Context, page, limit int) string {
 
 // ErrorResponse sends a JSON response with the given error and HTTP status code.
 // If the HTTP status code is not provided, it defaults to 400 Bad Request.
-func ErrorResponse(err error, ctx *gin.Context, httpCode ...int) {
+func ErrorResponse(ctx *gin.Context, err error, httpCode ...int) {
 	if len(httpCode) == 0 {
 		httpCode = append(httpCode, http.StatusBadRequest)
 	}
