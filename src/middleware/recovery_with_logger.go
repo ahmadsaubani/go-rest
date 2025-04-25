@@ -9,6 +9,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// RecoveryWithLogger returns a middleware that recover from any panics and logs the error to the configured logger.
+// The error response will be sent to the client with a 500 status code and a JSON response with "success" set to false and "message" set to "Internal server error".
 func RecoveryWithLogger() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		defer func() {

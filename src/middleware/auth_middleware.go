@@ -11,6 +11,16 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
+// JWTAuthMiddleware checks for a valid JWT token in the Authorization header of the request.
+// The middleware will abort the request with a 401 Unauthorized response if the token is missing,
+// invalid, or expired.
+//
+// The middleware expects the JWT token to be in the following format:
+//
+//	Authorization: Bearer <token>
+//
+// The middleware will extract the user_id claim from the token and store it in the gin.Context under the key "user_id".
+// The middleware will then call the next handler in the chain.
 func JWTAuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Ambil token dari Authorization header

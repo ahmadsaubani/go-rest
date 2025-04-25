@@ -27,6 +27,11 @@ func init() {
 	})
 }
 
+// NewLogger initializes and returns a new Logger instance. It ensures that
+// the log directory exists, creates or opens a log file with the current date
+// as its name, and sets up the file for appending log entries. If the log file
+// cannot be opened, the function will terminate the program.
+
 func NewLogger() *Logger {
 	logDir := "src/storage/logs"
 
@@ -48,14 +53,23 @@ func NewLogger() *Logger {
 	}
 }
 
+// Info logs the given message at the INFO level with the provided context.
+// The context is stored as structured data in the log entry.
 func (l *Logger) Info(message string, context map[string]interface{}) {
 	l.writeLog("INFO", message, context)
 }
+
+// Error logs the given message at the ERROR level with the provided context.
+// The context is stored as structured data in the log entry.
 
 func (l *Logger) Error(message string, context map[string]interface{}) {
 	l.writeLog("ERROR", message, context)
 }
 
+// writeLog logs the given message with the provided context and level.
+// It marshals the log entry into a JSON string and writes it to the log file,
+// surrounded by a separator. If marshaling fails, it prints an error message
+// and returns.
 func (l *Logger) writeLog(level, message string, context map[string]interface{}) {
 	timestamp := time.Now().Format(time.RFC3339)
 	entry := map[string]interface{}{
@@ -71,7 +85,6 @@ func (l *Logger) writeLog(level, message string, context map[string]interface{})
 		return
 	}
 
-	// Separator mewah
 	separator := "\n============================================================\n"
 
 	logOutput := fmt.Sprintf("%s\n%s%s", separator, string(jsonData), separator)

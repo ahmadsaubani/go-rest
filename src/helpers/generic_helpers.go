@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"gin/src/configs/database"
 	"gin/src/utils/filters"
-	"log"
 	"os"
 	"reflect"
 	"regexp"
@@ -14,7 +13,10 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
+
+const maxBatchSize = 500
 
 type Tabler interface {
 	TableName() string
@@ -23,12 +25,189 @@ type Tabler interface {
 var matchFirstCap = regexp.MustCompile("(.)([A-Z][a-z]+)")
 var matchAllCap = regexp.MustCompile("([a-z0-9])([A-Z])")
 
+// ToSnakeCase converts a given CamelCase string to snake_case.
+// This function uses regular expressions to identify capital letters
+// and insert underscores before them, then converts the entire string
+// to lowercase. For example, "CamelCase" becomes "camel_case".
+
 func ToSnakeCase(str string) string {
 	snake := matchFirstCap.ReplaceAllString(str, "${1}_${2}")
 	snake = matchAllCap.ReplaceAllString(snake, "${1}_${2}")
 	return strings.ToLower(snake)
 }
 
+// InsertModelBatch inserts a batch of models into the database. It will use GORM
+// if the USE_GORM environment variable is set to "true", otherwise it will use
+// native SQL. It will automatically set the created_at and updated_at fields to
+// the current time if they are present in the model and are of type time.Time.
+// The returned error is the error from the database operation.
+//
+// InsertModelBatch will automatically build a batch insert query from the given
+// models. It will use the maximum batch size of 500 records for each batch.
+// If the database connection is not available, InsertModelBatch returns
+// sql.ErrConnDone.
+func InsertModelBatch[T any](models []T) error {
+	if len(models) == 0 {
+		return nil
+	}
+
+	now := time.Now()
+	useGorm := os.Getenv("USE_GORM") == "true"
+	useSQL := !useGorm && database.SQLDB != nil
+
+	if !useGorm && !useSQL {
+		return fmt.Errorf("❌ No valid database connection available")
+	}
+
+	for start := 0; start < len(models); start += maxBatchSize {
+		end := start + maxBatchSize
+		if end > len(models) {
+			end = len(models)
+		}
+		batch := models[start:end]
+
+		// Transaksi GORM
+		if useGorm {
+			err := database.GormDB.Transaction(func(tx *gorm.DB) error {
+				for i := range batch {
+					val := reflect.ValueOf(&batch[i]).Elem()
+					typ := val.Type()
+
+					// Otomatis set created_at dan updated_at
+					for j := 0; j < val.NumField(); j++ {
+						field := typ.Field(j)
+						fieldValue := val.Field(j)
+						dbTag := field.Tag.Get("db")
+
+						// Set created_at dan updated_at
+						if strings.ToLower(dbTag) == "created_at" || strings.ToLower(field.Name) == "CreatedAt" {
+							if fieldValue.CanSet() && fieldValue.Type() == reflect.TypeOf(time.Time{}) {
+								fieldValue.Set(reflect.ValueOf(now))
+							}
+						}
+						if strings.ToLower(dbTag) == "updated_at" || strings.ToLower(field.Name) == "UpdatedAt" {
+							if fieldValue.CanSet() && fieldValue.Type() == reflect.TypeOf(time.Time{}) {
+								fieldValue.Set(reflect.ValueOf(now))
+							}
+						}
+					}
+				}
+
+				// Insert batch menggunakan GORM
+				if err := tx.Create(&batch).Error; err != nil {
+					return err
+				}
+				return nil
+			})
+			if err != nil {
+				return fmt.Errorf("❌ GORM transaction failed: %w", err)
+			}
+		}
+
+		// Transaksi Native SQL
+		if useSQL {
+			tx, err := database.SQLDB.Begin()
+			if err != nil {
+				return fmt.Errorf("❌ SQL transaction begin failed: %w", err)
+			}
+			defer tx.Rollback() // Ensure rollback on failure
+
+			firstVal := reflect.ValueOf(batch[0])
+			typ := firstVal.Type()
+			var tableName string
+			if t, ok := any(batch[0]).(Tabler); ok {
+				tableName = t.TableName()
+			} else {
+				tableName = ToSnakeCase(typ.Name()) + "s"
+			}
+
+			var columns []string
+			for i := 0; i < typ.NumField(); i++ {
+				field := typ.Field(i)
+				dbTag := field.Tag.Get("db")
+				gormTag := field.Tag.Get("gorm")
+
+				if strings.Contains(gormTag, "primaryKey") || dbTag == "id" {
+					continue
+				}
+				if dbTag != "" && dbTag != "-" {
+					columns = append(columns, dbTag)
+				}
+			}
+
+			if len(columns) == 0 {
+				return errors.New("no columns to insert")
+			}
+
+			// Placeholder for batch values
+			placeholderRows := []string{}
+			allValues := []any{}
+			paramIdx := 1
+
+			for _, m := range batch {
+				val := reflect.ValueOf(m)
+				rowPlaceholders := []string{}
+
+				// Set created_at dan updated_at
+				for i := 0; i < val.NumField(); i++ {
+					field := typ.Field(i)
+					fieldValue := val.Field(i)
+					dbTag := field.Tag.Get("db")
+					gormTag := field.Tag.Get("gorm")
+
+					if strings.Contains(gormTag, "primaryKey") || dbTag == "id" || dbTag == "-" || dbTag == "" {
+						continue
+					}
+
+					// Set created_at dan updated_at
+					if strings.ToLower(dbTag) == "created_at" || strings.ToLower(field.Name) == "CreatedAt" {
+						allValues = append(allValues, now)
+					} else if strings.ToLower(dbTag) == "updated_at" || strings.ToLower(field.Name) == "UpdatedAt" {
+						allValues = append(allValues, now)
+					} else {
+						allValues = append(allValues, fieldValue.Interface())
+					}
+					rowPlaceholders = append(rowPlaceholders, fmt.Sprintf("$%d", paramIdx))
+					paramIdx++
+				}
+				placeholderRows = append(placeholderRows, "("+strings.Join(rowPlaceholders, ", ")+")")
+			}
+
+			query := fmt.Sprintf(
+				"INSERT INTO %s (%s) VALUES %s",
+				tableName,
+				strings.Join(columns, ", "),
+				strings.Join(placeholderRows, ", "),
+			)
+
+			// Execute SQL batch insert
+			if _, err := tx.Exec(query, allValues...); err != nil {
+				return fmt.Errorf("❌ SQL batch insert failed: %w", err)
+			}
+
+			// Commit the transaction
+			if err := tx.Commit(); err != nil {
+				return fmt.Errorf("❌ SQL transaction commit failed: %w", err)
+			}
+		}
+	}
+
+	return nil
+}
+
+// InsertModel inserts a model into the database.
+//
+// If GORM is enabled, it will use GORM's Create method.
+// If GORM is disabled, it will use the SQLDB to execute an INSERT query.
+//
+// The returned error is the error from the database operation.
+//
+// InsertModel will automatically set the created_at and updated_at fields to the current time
+// if they are present in the model and are of type time.Time.
+//
+// InsertModel will return an error if the model has no valid columns to insert.
+//
+// InsertModel will return an error if the primary key field is not addressable.
 func InsertModel[T any](model *T) error {
 	if database.GormDB != nil {
 		return database.GormDB.Create(model).Error
@@ -101,8 +280,6 @@ func InsertModel[T any](model *T) error {
 		strings.Join(placeholders, ", "),
 	)
 
-	log.Printf("🛠 SQL: %s | Values: %#v", query, values)
-
 	if !primaryKeyField.CanAddr() {
 		return errors.New("cannot get address of primary key field")
 	}
@@ -156,6 +333,10 @@ func InsertModel[T any](model *T) error {
 // 	return nil
 // }
 
+// GetAllModels will fetch all records from the database based on the given limit,
+// offset, and orderBy. It will use GORM if the USE_GORM environment variable is set
+// to "true", otherwise it will use native SQL. It will automatically build a WHERE
+// clause from the query string parameters of the given gin.Context.
 func GetAllModels[T any](ctx *gin.Context, models *[]T, limit, offset int, orderBy string) error {
 	useGORM := os.Getenv("USE_GORM") == "true"
 	if useGORM {
@@ -227,6 +408,9 @@ func GetAllModels[T any](ctx *gin.Context, models *[]T, limit, offset int, order
 	return nil
 }
 
+// scanRowDestinations returns a slice of addresses of the fields of the given struct that can be set.
+// It returns an error if the given model is not a non-nil pointer to a struct.
+// The returned slice is suitable for passing to the Scan method of a sql.Row.
 func scanRowDestinations[T any](model *T) ([]any, error) {
 	val := reflect.ValueOf(model)
 	if val.Kind() != reflect.Ptr || val.IsNil() {
@@ -248,6 +432,12 @@ func scanRowDestinations[T any](model *T) ([]any, error) {
 	return dest, nil
 }
 
+// GetTableName returns the name of the database table for the given model.
+// If the model implements the Tabler interface, the table name is obtained
+// from the TableName method.
+// Otherwise, the table name is obtained by converting the model name to
+// snake case and appending "s".
+// For example, the model named "User" is mapped to the table named "users".
 func GetTableName[T any](model *T) string {
 	if t, ok := any(model).(Tabler); ok {
 		return t.TableName()
@@ -256,6 +446,16 @@ func GetTableName[T any](model *T) string {
 	return ToSnakeCase(typ.Name()) + "s" // fallback User -> users
 }
 
+// GetModelByID returns the model with the given ID from the database.
+// If the given model implements the Tabler interface, the table name is obtained
+// from the TableName method.
+// Otherwise, the table name is obtained by converting the model name to
+// snake case and appending "s".
+// For example, the model named "User" is mapped to the table named "users".
+// If the model does not exist in the database, GetModelByID returns
+// sql.ErrNoRows.
+// If the database connection is not available, GetModelByID returns
+// sql.ErrConnDone.
 func GetModelByID[T any](model *T, id any) error {
 	if database.GormDB != nil {
 		return database.GormDB.First(model, id).Error
@@ -272,6 +472,13 @@ func GetModelByID[T any](model *T, id any) error {
 
 	return scanRowIntoStruct(row, model)
 }
+
+// scanRowIntoStruct scans a single SQL row into the provided model struct.
+// The model must be a non-nil pointer to a struct with fields that match the
+// database column names via `db` tags. Fields with a `db` tag set to "-" or
+// not set at all are ignored. If the row does not exist, it returns an error
+// indicating the record was not found. If scanning fails, it returns an error
+// with details about the scan failure.
 
 func scanRowIntoStruct[T any](row *sql.Row, model *T) error {
 	val := reflect.ValueOf(model)
@@ -310,6 +517,15 @@ func scanRowIntoStruct[T any](row *sql.Row, model *T) error {
 	return nil
 }
 
+// UpdateModelByIDWithMap updates a single record in the database with the given ID.
+// The updatedFields map specifies the fields to update and their new values.
+// If the database connection uses GORM, it will use GORM's Update method.
+// Otherwise, it will generate an UPDATE query using the given map.
+// The updated_at field will automatically be set to the current time if it is not
+// present in the map.
+// If the record is not found, UpdateModelByIDWithMap returns an error with a message
+// indicating the record was not found. If the update fails, it returns an error with
+// details about the failure.
 func UpdateModelByIDWithMap[T any](updatedFields map[string]interface{}, id any) error {
 	if database.GormDB != nil {
 		// Menggunakan new(T) untuk memberikan tipe eksplisit ke GORM
@@ -346,6 +562,15 @@ func UpdateModelByIDWithMap[T any](updatedFields map[string]interface{}, id any)
 	return err
 }
 
+// UpdateModelByID updates a single record in the database with the given ID.
+// The updated fields are set from the given model.
+// If the database connection uses GORM, it will use GORM's Update method.
+// Otherwise, it will generate an UPDATE query using reflection.
+// The updated_at field will automatically be set to the current time if it is not
+// present in the model.
+// If the record is not found, UpdateModelByID returns an error with a message
+// indicating the record was not found. If the update fails, it returns an error with
+// details about the failure.
 func UpdateModelByID[T any](model *T, id any) error {
 	if database.GormDB != nil {
 		return database.GormDB.Model(model).Where("id = ?", id).Updates(model).Error
@@ -396,6 +621,8 @@ func UpdateModelByID[T any](model *T, id any) error {
 	return err
 }
 
+// hasDeletedAt checks if the given model has a field named "DeletedAt" of type time.Time.
+// It checks the model's fields using reflection and returns true if the field exists, false otherwise.
 func hasDeletedAt(model any) bool {
 	val := reflect.ValueOf(model).Elem()
 	typ := val.Type()
@@ -410,6 +637,12 @@ func hasDeletedAt(model any) bool {
 	return false
 }
 
+// DeleteModelByID deletes a single record from the database with the given ID.
+// It checks if the given model has a field named "DeletedAt" of type time.Time.
+// If it does, it will perform a soft delete by setting the "DeletedAt" field to the current time.
+// If it doesn't, it will perform a hard delete.
+// If the database connection is not available, DeleteModelByID returns sql.ErrConnDone.
+// If the delete operation fails, it returns an error with details about the failure.
 func DeleteModelByID[T any](model *T, id any) error {
 	if database.GormDB != nil {
 		// GORM punya soft delete bawaan, tapi kita handle manual biar konsisten
@@ -437,6 +670,14 @@ func DeleteModelByID[T any](model *T, id any) error {
 	_, err := database.SQLDB.Exec(query, id)
 	return err
 }
+
+// FindOneByField retrieves a single record from the database that matches the given conditions.
+// The conditions must be provided as key-value pairs. For example, to find a user with a specific
+// email and username, you would call: FindOneByField(&user, "email", emailValue, "username", usernameValue).
+// If GORM is enabled, it uses GORM's querying capabilities. Otherwise, it uses native SQL.
+// The function returns sql.ErrConnDone if no database connection is available.
+// If the record is found, it populates the provided model with the record's data.
+// If no record matches the conditions, it returns an error indicating the record was not found.
 
 func FindOneByField[T any](model *T, conditions ...any) error {
 	if len(conditions)%2 != 0 {

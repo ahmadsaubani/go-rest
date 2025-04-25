@@ -9,6 +9,12 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// SaveRequestBody is a middleware that reads the request body into a byte
+// slice and saves it into the context under the key "RequestBody". It also
+// parses the request body as application/x-www-form-urlencoded and saves it
+// into the context under the key "RequestForm". If the request body is
+// multipart/form-data, it parses it and saves it into the context under the
+// key "RequestForm" as well.
 func SaveRequestBody() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		method := c.Request.Method

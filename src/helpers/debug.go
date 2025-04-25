@@ -18,7 +18,8 @@ func init() {
 	}
 }
 
-// Dd (Dump and Die)
+// Dd - Dump and exit. This is similar to Laravel's dd helper.
+// It dumps the given values and exits the program.
 func Dd(data ...interface{}) {
 	for _, d := range data {
 		spew.Dump(d)
@@ -26,21 +27,25 @@ func Dd(data ...interface{}) {
 	os.Exit(1)
 }
 
-// Dump without exiting
+// Dump is similar to Dd, but it does not exit the program. It
+// simply dumps the given values to the console.
 func Dump(data ...interface{}) {
 	for _, d := range data {
 		spew.Dump(d)
 	}
 }
 
-// Dump as JSON-like
+// DumpJSON is similar to Dump, but it formats the output as JSON.
 func DumpJSON(data ...interface{}) {
 	for _, d := range data {
 		fmt.Printf("%+v\n", d)
 	}
 }
 
-// DdLog - Log to file and exit
+// DdLog logs the given data to a file with the current date as the filename
+// and also prints it to the console. It creates the log directory if it does
+// not exist. After logging, the function exits the program.
+
 func DdLog(data ...interface{}) {
 	logData := ""
 	for _, d := range data {
@@ -69,9 +74,9 @@ func DdLog(data ...interface{}) {
 	os.Exit(1)
 }
 
-// DumpLog - Log to file and print to console without exiting
-
-// helpers.DumpLog("User trying to login:", user)
+// DumpLog logs the given data to a file with the current date as the filename
+// and also prints it to the console. It creates the log directory if it does
+// not exist. After logging, the function does not exit the program.
 func DumpLog(data ...interface{}) {
 	logData := ""
 	for _, d := range data {

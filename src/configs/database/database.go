@@ -21,6 +21,12 @@ type DBConnection struct {
 var GormDB *gorm.DB
 var SQLDB *sql.DB
 
+// ConnectDatabase establishes a connection to the database using either GORM or native SQL
+// based on the USE_GORM environment variable. If USE_GORM is set to "true", it connects
+// using GORM and resets the database using GORM migrations. Otherwise, it connects using
+// native SQL and performs manual migrations. It returns a DBConnection struct containing
+// the active database connection.
+
 func ConnectDatabase() *DBConnection {
 	fmt.Println("===== Connecting To Database =====")
 

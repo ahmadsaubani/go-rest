@@ -17,6 +17,7 @@ import (
 func API(db *database.DBConnection) *gin.Engine {
 
 	r := gin.Default()
+	r.Use(middleware.SecureHeadersMiddleware())
 	r.Use(middleware.RecoveryWithLogger())
 	r.Use(middleware.SaveRequestBody())
 

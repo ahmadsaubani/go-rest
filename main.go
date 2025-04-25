@@ -26,7 +26,7 @@ func main() {
 	db := database.ConnectDatabase()
 
 	// Seed users
-	user_seeders.SeedUsers()
+	user_seeders.SeedUsers(db, 5000)
 
 	// Initialize routes
 	r := routes.API(db)

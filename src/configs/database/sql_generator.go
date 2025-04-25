@@ -2,11 +2,25 @@ package database
 
 import (
 	"fmt"
+	"os"
 	"reflect"
 	"strings"
 )
 
+// GenerateCreateTableSQL generates a SQL string for creating a table based on the given model.
+// The `tableName` parameter is the name of the table to be created.
+// The `model` parameter must be a struct.
+// The function will generate a SQL string for creating the table with the given name,
+// with columns and constraints according to the struct's fields and their tags.
+// The function will also generate a trigger SQL for automatically setting the `updated_at` field
+// to the current time on each update, if the struct has a field with the "db" tag set to "updated_at".
+// The function will panic if the `DB_DRIVER` environment variable is not set to "postgres" or "mysql".
 func GenerateCreateTableSQL(tableName string, model interface{}) string {
+	engine := strings.ToLower(os.Getenv("DB_DRIVER")) // "postgres" atau "mysql"
+	if engine != "postgres" && engine != "mysql" {
+		panic("DB_DRIVER must be either 'postgres' or 'mysql'")
+	}
+
 	t := reflect.TypeOf(model)
 	if t.Kind() != reflect.Struct {
 		panic("model must be a struct")
@@ -31,42 +45,48 @@ func GenerateCreateTableSQL(tableName string, model interface{}) string {
 			continue
 		}
 
-		// Unwrap pointer
 		fieldType := field.Type
 		if fieldType.Kind() == reflect.Ptr {
 			fieldType = fieldType.Elem()
 		}
 
-		colType, isAutoUpdate := GoTypeToPostgresType(fieldType, opts)
+		colType, isAutoUpdate := GoTypeToSQLType(engine, fieldType, opts)
 		if isAutoUpdate {
 			hasUpdatedAt = true
 		}
 
-		// Foreign key
 		for _, opt := range opts {
 			if strings.HasPrefix(opt, "foreign:") {
 				ref := strings.TrimPrefix(opt, "foreign:")
-				constraints = append(constraints, fmt.Sprintf("FOREIGN KEY (\"%s\") REFERENCES %s", col, ref))
+				constraints = append(constraints, fmt.Sprintf("FOREIGN KEY (%s) REFERENCES %s", quoteIdent(engine, col), ref))
 			}
 		}
 
-		fields = append(fields, fmt.Sprintf(`"%s" %s`, col, colType))
+		fields = append(fields, fmt.Sprintf("%s %s", quoteIdent(engine, col), colType))
 	}
 
 	allDefs := append(fields, constraints...)
-	createTableSQL := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (
-%s
-);`, tableName, strings.Join(allDefs, ",\n"))
+	createTableSQL := fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (\n%s\n);", quoteIdent(engine, tableName), strings.Join(allDefs, ",\n"))
 
 	if hasUpdatedAt {
-		triggerSQL := GenerateUpdatedAtTriggerSQL(tableName)
-		createTableSQL += "\n" + triggerSQL
+		if engine == "postgres" {
+			createTableSQL += "\n" + GenerateUpdatedAtTriggerSQLPostgres(tableName)
+		} else {
+			createTableSQL += "\n" + GenerateUpdatedAtTriggerSQLMySQL(tableName)
+		}
 	}
 
 	return createTableSQL
 }
 
-func GoTypeToPostgresType(goType reflect.Type, opts []string) (string, bool) {
+func quoteIdent(engine, ident string) string {
+	if engine == "postgres" {
+		return `"` + ident + `"`
+	}
+	return "`" + ident + "`"
+}
+
+func GoTypeToSQLType(engine string, goType reflect.Type, opts []string) (string, bool) {
 	flags := map[string]bool{}
 	var defaultVal string
 	isAutoUpdate := false
@@ -86,22 +106,22 @@ func GoTypeToPostgresType(goType reflect.Type, opts []string) (string, bool) {
 	switch goType.Kind() {
 	case reflect.Int, reflect.Int64:
 		if flags["serial"] {
-			base = "SERIAL"
+			if engine == "postgres" {
+				base = "SERIAL"
+			} else {
+				base = "BIGINT AUTO_INCREMENT"
+			}
 		} else {
 			base = "BIGINT"
 		}
 	case reflect.Uint, reflect.Uint64:
-		if flags["serial"] {
-			base = "BIGSERIAL"
-		} else {
-			base = "BIGINT"
-		}
+		base = "BIGINT UNSIGNED"
 	case reflect.String:
 		base = "TEXT"
 	case reflect.Bool:
 		base = "BOOLEAN"
 	case reflect.Float32, reflect.Float64:
-		base = "DOUBLE PRECISION"
+		base = "DOUBLE"
 	case reflect.Struct:
 		if goType.PkgPath() == "time" && goType.Name() == "Time" {
 			base = "TIMESTAMP"
@@ -112,17 +132,21 @@ func GoTypeToPostgresType(goType reflect.Type, opts []string) (string, bool) {
 		base = "TEXT"
 	}
 
-	// Format SQL dalam urutan yang benar
 	var parts []string
 	parts = append(parts, base)
 
 	if defaultVal != "" {
 		if defaultVal == "now" && goType.PkgPath() == "time" && goType.Name() == "Time" {
-			parts = append(parts, "DEFAULT CURRENT_TIMESTAMP")
+			if engine == "postgres" {
+				parts = append(parts, "DEFAULT CURRENT_TIMESTAMP")
+			} else if engine == "mysql" {
+				parts = append(parts, "DEFAULT CURRENT_TIMESTAMP")
+			}
 		} else {
 			parts = append(parts, fmt.Sprintf("DEFAULT '%s'", defaultVal))
 		}
 	}
+
 	if flags["notnull"] {
 		parts = append(parts, "NOT NULL")
 	}
@@ -136,91 +160,30 @@ func GoTypeToPostgresType(goType reflect.Type, opts []string) (string, bool) {
 	return strings.Join(parts, " "), isAutoUpdate
 }
 
-// func GoTypeToPostgresType(goType reflect.Type, opts []string) (string, bool) {
-// 	flags := map[string]bool{}
-// 	var defaultVal string
-// 	var isAutoUpdate bool
+func GenerateUpdatedAtTriggerSQLPostgres(tableName string) string {
+	return fmt.Sprintf(`
+CREATE OR REPLACE FUNCTION trigger_set_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+	NEW.updated_at = NOW();
+	RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
 
-// 	// Parse tags for default and autoupdate
-// 	for _, opt := range opts {
-// 		if strings.HasPrefix(opt, "default:") {
-// 			defaultVal = strings.TrimPrefix(opt, "default:")
-// 		} else if opt == "autoupdate" {
-// 			isAutoUpdate = true
-// 		} else {
-// 			flags[opt] = true
-// 		}
-// 	}
+DROP TRIGGER IF EXISTS set_updated_at ON %s;
+CREATE TRIGGER set_updated_at
+BEFORE UPDATE ON %s
+FOR EACH ROW
+EXECUTE FUNCTION trigger_set_updated_at();`, tableName, tableName)
+}
 
-// 	var base string
-// 	switch goType.Kind() {
-// 	case reflect.Int, reflect.Int64:
-// 		if flags["serial"] {
-// 			base = "SERIAL"
-// 		} else {
-// 			base = "BIGINT"
-// 		}
-// 	case reflect.Uint, reflect.Uint64:
-// 		if flags["serial"] {
-// 			base = "BIGSERIAL"
-// 		} else {
-// 			base = "BIGINT"
-// 		}
-// 	case reflect.String:
-// 		base = "TEXT"
-// 	case reflect.Bool:
-// 		base = "BOOLEAN"
-// 	case reflect.Float32, reflect.Float64:
-// 		base = "DOUBLE PRECISION"
-// 	case reflect.Struct:
-// 		if goType.PkgPath() == "time" && goType.Name() == "Time" {
-// 			base = "TIMESTAMP"
-// 		} else {
-// 			base = "TEXT"
-// 		}
-// 	default:
-// 		base = "TEXT"
-// 	}
-
-// 	var constraints []string
-// 	if flags["primary"] {
-// 		constraints = append(constraints, "PRIMARY KEY")
-// 	}
-// 	if flags["notnull"] {
-// 		constraints = append(constraints, "NOT NULL")
-// 	}
-// 	if flags["unique"] {
-// 		constraints = append(constraints, "UNIQUE")
-// 	}
-// 	if defaultVal != "" {
-// 		if defaultVal == "now" && base == "TIMESTAMP" {
-// 			constraints = append(constraints, "DEFAULT NOW()")
-// 		} else {
-// 			constraints = append(constraints, fmt.Sprintf("DEFAULT '%s'", defaultVal))
-// 		}
-// 	}
-// 	if len(constraints) > 0 {
-// 		base += " " + strings.Join(constraints, " ")
-// 	}
-
-// 	return base, isAutoUpdate
-// }
-
-func GenerateUpdatedAtTriggerSQL(tableName string) string {
-	triggerFunc := fmt.Sprintf(`
-		CREATE OR REPLACE FUNCTION trigger_set_updated_at()
-		RETURNS TRIGGER AS $$
-		BEGIN
-		NEW.updated_at = NOW();
-		RETURN NEW;
-		END;
-		$$ LANGUAGE plpgsql;`)
-
-	trigger := fmt.Sprintf(`
-		CREATE TRIGGER set_updated_at
-		BEFORE UPDATE ON %s
-		FOR EACH ROW
-		EXECUTE FUNCTION trigger_set_updated_at();`, tableName)
-
-	return triggerFunc + "\n" + trigger
+func GenerateUpdatedAtTriggerSQLMySQL(tableName string) string {
+	return fmt.Sprintf(`
+DROP TRIGGER IF EXISTS set_updated_at_%s;
+CREATE TRIGGER set_updated_at_%s
+BEFORE UPDATE ON %s
+FOR EACH ROW
+BEGIN
+	SET NEW.updated_at = CURRENT_TIMESTAMP;
+END;`, tableName, tableName, tableName)
 }
