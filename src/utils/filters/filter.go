@@ -79,6 +79,7 @@ func BuildFilters(ctx *gin.Context, useGORM bool) (string, []interface{}, error)
 				args = append(args, val)
 				argIndex++
 			}
+
 		case "lessThan":
 			val, err := strconv.Atoi(value)
 			if err != nil {
@@ -92,6 +93,47 @@ func BuildFilters(ctx *gin.Context, useGORM bool) (string, []interface{}, error)
 				args = append(args, val)
 				argIndex++
 			}
+
+		case "equals":
+			if useGORM {
+				filters = append(filters, fmt.Sprintf("%s = ?", field))
+				args = append(args, value)
+			} else {
+				filters = append(filters, fmt.Sprintf("%s = $%d", field, argIndex))
+				args = append(args, value)
+				argIndex++
+			}
+
+		case "notEquals":
+			if useGORM {
+				filters = append(filters, fmt.Sprintf("%s != ?", field))
+				args = append(args, value)
+			} else {
+				filters = append(filters, fmt.Sprintf("%s != $%d", field, argIndex))
+				args = append(args, value)
+				argIndex++
+			}
+
+		case "greaterThanOrEqual":
+			if useGORM {
+				filters = append(filters, fmt.Sprintf("%s >= ?", field))
+				args = append(args, value)
+			} else {
+				filters = append(filters, fmt.Sprintf("%s >= $%d", field, argIndex))
+				args = append(args, value)
+				argIndex++
+			}
+
+		case "lessThanOrEqual":
+			if useGORM {
+				filters = append(filters, fmt.Sprintf("%s <= ?", field))
+				args = append(args, value)
+			} else {
+				filters = append(filters, fmt.Sprintf("%s <= $%d", field, argIndex))
+				args = append(args, value)
+				argIndex++
+			}
+
 		case "in":
 			valList := strings.Split(value, ",")
 			if useGORM {
@@ -106,6 +148,22 @@ func BuildFilters(ctx *gin.Context, useGORM bool) (string, []interface{}, error)
 				}
 				filters = append(filters, fmt.Sprintf("%s IN (%s)", field, strings.Join(placeholders, ",")))
 			}
+
+		case "notIn":
+			valList := strings.Split(value, ",")
+			if useGORM {
+				filters = append(filters, fmt.Sprintf("%s NOT IN (?)", field))
+				args = append(args, valList)
+			} else {
+				placeholders := []string{}
+				for _, val := range valList {
+					placeholders = append(placeholders, fmt.Sprintf("$%d", argIndex))
+					args = append(args, val)
+					argIndex++
+				}
+				filters = append(filters, fmt.Sprintf("%s NOT IN (%s)", field, strings.Join(placeholders, ",")))
+			}
+
 		default:
 			return "", nil, fmt.Errorf("unsupported operator: %s", operator)
 		}

@@ -33,11 +33,14 @@ func GetProfile(ctx *gin.Context) {
 	helpers.SuccessResponse(ctx, "Data Found!", response)
 }
 
+// GetAllUsers returns all users with pagination.
+// It will return a JSON response with pagination metadata and links.
+// The response will contain an array of users with their UUID, ID, Email, and Username.
 func GetAllUsers(service services.UserService) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		page, limit, offset := helpers.GetPaginationParams(ctx)
 
-		userList, total, err := service.GetPaginatedUsers(ctx, limit, offset, "created_at DESC")
+		userList, total, err := service.GetPaginatedUsers(ctx, limit, offset)
 		if err != nil {
 			helpers.ErrorResponse(ctx, err, http.StatusInternalServerError)
 			return

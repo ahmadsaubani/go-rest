@@ -381,12 +381,21 @@ func InsertModel[T any](model *T) error {
 // offset, and orderBy. It will use GORM if the USE_GORM environment variable is set
 // to "true", otherwise it will use native SQL. It will automatically build a WHERE
 // clause from the query string parameters of the given gin.Context.
-func GetAllModels[T any](ctx *gin.Context, models *[]T, limit, offset int, orderBy string) error {
+func GetAllModels[T any](ctx *gin.Context, models *[]T, limit, offset int) error {
 	useGORM := os.Getenv("USE_GORM") == "true"
 	if useGORM {
 		useGORM = true
 	} else {
 		useGORM = false
+	}
+	orderBy := ctx.DefaultQuery("order_by", "")
+	if orderBy != "" {
+		// Pisahkan kolom dan arah (asc/desc) berdasarkan koma
+		orderParts := strings.Split(orderBy, ",")
+		if len(orderParts) == 2 {
+			// Format ulang menjadi "created_at asc" atau "created_at desc"
+			orderBy = fmt.Sprintf("%s %s", orderParts[0], orderParts[1])
+		}
 	}
 
 	// GORM

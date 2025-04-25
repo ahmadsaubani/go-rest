@@ -50,7 +50,7 @@ POST   /api/v1/user/logout
 4. **Filter Usage**:
 ```sh
 Example :
-1. /api/v1/users?email[like]=%john%&age[moreThan]=18&page=1&per_page=10
+1. /api/v1/users?email[like]=%john%&age[moreThan]=18&order_by=id,desc&page=1&per_page=10
 ```
 
 #### STRUCTURE PROJECT
