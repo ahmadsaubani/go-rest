@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
@@ -24,6 +25,34 @@ type Tabler interface {
 
 var matchFirstCap = regexp.MustCompile("(.)([A-Z][a-z]+)")
 var matchAllCap = regexp.MustCompile("([a-z0-9])([A-Z])")
+
+// GenerateUUID returns a new random UUID as a string.
+func GenerateUUID() string {
+	return uuid.New().String()
+}
+
+// SetUUIDForStruct attempts to set a random UUID for a struct's "UUID" field.
+// The function expects a pointer to a struct as its argument.
+// It returns an error if the provided argument is not a pointer to a struct.
+// If the struct contains a field named "UUID" that is of type string and is settable,
+// a new UUID is generated and assigned to this field.
+
+func SetUUIDForStruct(model interface{}) error {
+	val := reflect.ValueOf(model).Elem()
+	// Pastikan model adalah pointer ke struct
+	if val.Kind() != reflect.Struct {
+		return fmt.Errorf("expected a struct, got %s", val.Kind())
+	}
+
+	// Cari field dengan nama "UUID"
+	uidField := val.FieldByName("UUID")
+	if uidField.IsValid() && uidField.CanSet() && uidField.Kind() == reflect.String {
+		// Set UUID jika field UUID ditemukan
+		uidField.SetString(GenerateUUID())
+	}
+
+	return nil
+}
 
 // ToSnakeCase converts a given CamelCase string to snake_case.
 // This function uses regular expressions to identify capital letters
@@ -65,6 +94,13 @@ func InsertModelBatch[T any](models []T) error {
 			end = len(models)
 		}
 		batch := models[start:end]
+
+		for i := range batch {
+			err := SetUUIDForStruct(&batch[i])
+			if err != nil {
+				return fmt.Errorf("❌ Error setting UUID: %w", err)
+			}
+		}
 
 		// Transaksi GORM
 		if useGorm {
@@ -210,12 +246,20 @@ func InsertModelBatch[T any](models []T) error {
 // InsertModel will return an error if the primary key field is not addressable.
 func InsertModel[T any](model *T) error {
 	if database.GormDB != nil {
+		if err := SetUUIDForStruct(model); err != nil {
+			return fmt.Errorf("❌ Error setting UUID: %w", err)
+		}
+
 		return database.GormDB.Create(model).Error
 	}
 
 	if database.SQLDB == nil {
 		fmt.Println("❌ No database connection available: %w", sql.ErrConnDone)
 		return sql.ErrConnDone
+	}
+
+	if err := SetUUIDForStruct(model); err != nil {
+		return fmt.Errorf("❌ Error setting UUID: %w", err)
 	}
 
 	val := reflect.ValueOf(model).Elem()

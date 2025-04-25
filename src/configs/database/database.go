@@ -50,16 +50,16 @@ func ConnectDatabaseUsingGorm() *gorm.DB {
 
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
-		fmt.Println("❌ Failed to connect to database using GORM: %v", err)
+		fmt.Println("❌ Failed to connect to database using GORM: %w", err)
 	}
 
 	// Test connection
 	sqlDB, err := db.DB()
 	if err != nil {
-		fmt.Println("❌ Failed to get database instance: %v", err)
+		fmt.Println("❌ Failed to get database instance: %w", err)
 	}
 	if err := sqlDB.Ping(); err != nil {
-		fmt.Println("❌ Database is not reachable: %v", err)
+		fmt.Println("❌ Database is not reachable: %w", err)
 	}
 
 	// Configure connection pool
@@ -87,7 +87,7 @@ func ResetDBUsingGorm(db *gorm.DB) {
 		&auth.RefreshToken{},
 	)
 	if err != nil {
-		fmt.Println("❌ Failed to drop tables: %v", err)
+		fmt.Println("❌ Failed to drop tables: %w", err)
 	}
 
 	fmt.Println("✅ Dropped all tables")
@@ -99,7 +99,7 @@ func ResetDBUsingGorm(db *gorm.DB) {
 		&auth.RefreshToken{},
 	)
 	if err != nil {
-		fmt.Println("❌ Failed to migrate tables: %v", err)
+		fmt.Println("❌ Failed to migrate tables: %w", err)
 	}
 
 	fmt.Println("✅ Database migrated successfully")
@@ -113,12 +113,12 @@ func connectWithSQL() *sql.DB {
 
 	db, err := sql.Open("postgres", dsn)
 	if err != nil {
-		fmt.Println("❌ Failed to connect to database: %v", err)
+		fmt.Println("❌ Failed to connect to database: %w", err)
 	}
 
 	// Test connection
 	if err := db.Ping(); err != nil {
-		fmt.Println("❌ Database is not reachable: %v", err)
+		fmt.Println("❌ Database is not reachable: %w", err)
 	}
 
 	// Configure connection pool
@@ -142,7 +142,7 @@ func ResetDB(db *sql.DB) {
 	for _, name := range []string{"access_tokens", "refresh_tokens", "users"} {
 		dropSQL := fmt.Sprintf(`DROP TABLE IF EXISTS "%s" CASCADE;`, name)
 		if _, err := db.Exec(dropSQL); err != nil {
-			fmt.Println("❌ Drop failed: %v", err)
+			fmt.Println("❌ Drop failed: %w", err)
 		}
 	}
 
@@ -156,7 +156,7 @@ func ResetDB(db *sql.DB) {
 	for _, q := range createQueries {
 
 		if _, err := db.Exec(q); err != nil {
-			fmt.Println("❌ Create failed: %v", err)
+			fmt.Println("❌ Create failed: %w", err)
 		}
 	}
 

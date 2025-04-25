@@ -13,46 +13,6 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-// func SeedUsers(userTargetCount int64) {
-// 	userCount, err := helpers.CountModel[users.User]()
-// 	if err != nil {
-// 		fmt.Println("Error counting users:", err)
-// 		return
-// 	}
-
-// 	if userCount >= userTargetCount {
-// 		fmt.Printf("Users already seeded. Current count: %d\n", userCount)
-// 		return
-// 	}
-// 	start := time.Now()
-// 	// Seed users
-// 	for i := userCount; i < userTargetCount; i++ {
-// 		password := "password123"
-// 		hashedPassword, _ := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-
-// 		email := faker.Email()
-// 		if i == 0 {
-// 			email = "ahmadsaubani@testing.com"
-// 		}
-
-// 		user := users.User{
-// 			Email:    email,
-// 			Username: fmt.Sprintf("%s_%d", faker.Username(), rand.Intn(10000)),
-// 			Password: string(hashedPassword),
-// 		}
-
-// 		if err := helpers.InsertModel(&user); err != nil {
-// 			log.Printf("failed to seed user %d: %v\n", i, err)
-// 		}
-// 	}
-
-// 	// Calculate the total elapsed time after the loop finishes
-// 	duration := time.Since(start)
-// 	fmt.Printf("Total time to seed users: %s\n", duration.String())
-
-// 	fmt.Printf("✅ Seeded %d users successfully\n", userTargetCount)
-// }
-
 func SeedUsers(db *database.DBConnection, target int64) {
 	start := time.Now()
 
@@ -69,7 +29,7 @@ func SeedUsers(db *database.DBConnection, target int64) {
 	fmt.Printf("🔄 Seeding %d users...\n", target-int64(userCount))
 
 	var usersBatch []users.User
-	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("password123"), bcrypt.MinCost)
+	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("password123"), bcrypt.DefaultCost)
 	now := time.Now()
 
 	for i := int64(userCount); i < target; i++ {
@@ -90,7 +50,7 @@ func SeedUsers(db *database.DBConnection, target int64) {
 	// Menggunakan fungsi InsertModelBatch untuk memasukkan data batch
 	err = helpers.InsertModelBatch(usersBatch)
 	if err != nil {
-		log.Println("❌ Batch insert failed:", err)
+		fmt.Println("❌ Batch insert failed: %w", err)
 	}
 
 	elapsed := time.Since(start).Seconds()

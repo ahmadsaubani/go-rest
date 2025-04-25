@@ -10,7 +10,6 @@ import (
 )
 
 func GetProfile(ctx *gin.Context) {
-	// Extract user_id from context set by JWT middleware
 	userID, exists := ctx.Get("user_id")
 
 	if !exists {
@@ -47,6 +46,7 @@ func GetAllUsers(service services.UserService) gin.HandlerFunc {
 		var response []users.ProfileResponse
 		for _, u := range userList {
 			response = append(response, users.ProfileResponse{
+				UUID:     u.UUID,
 				ID:       u.ID,
 				Email:    u.Email,
 				Username: u.Username,
