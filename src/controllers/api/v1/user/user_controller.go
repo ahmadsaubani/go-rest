@@ -1,6 +1,7 @@
 package user
 
 import (
+	"fmt"
 	"gin/src/entities/users"
 	"gin/src/helpers"
 	services "gin/src/services/user_services"
@@ -61,5 +62,47 @@ func GetAllUsers(service services.UserService) gin.HandlerFunc {
 			Limit: limit,
 			Total: total,
 		})
+	}
+}
+
+func UploadAvatar(userService services.UserService) gin.HandlerFunc {
+	return func(ctx *gin.Context) {
+		userID, exists := ctx.Get("user_id")
+
+		if !exists {
+			helpers.ErrorResponse(ctx, fmt.Errorf("user not exists"), http.StatusBadRequest)
+			return
+		}
+
+		var userIDInt64 int64
+		switch v := userID.(type) {
+		case int64:
+			userIDInt64 = v
+		case uint:
+			userIDInt64 = int64(v)
+		case uint64:
+			userIDInt64 = int64(v)
+		default:
+			helpers.ErrorResponse(ctx, fmt.Errorf("unexpected type for user_id: %T", v), http.StatusBadRequest)
+			return
+		}
+
+		// Bind file from the request
+		file, _, err := ctx.Request.FormFile("file")
+
+		if err != nil {
+			helpers.ErrorResponse(ctx, fmt.Errorf("failed to get file from form-data: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		// Call the service to upload the file and get the URL
+		avatarURL, err := userService.UploadAvatar(ctx, userIDInt64, file, "avatars")
+		if err != nil {
+			helpers.ErrorResponse(ctx, err, http.StatusInternalServerError)
+			return
+		}
+
+		// Return success response
+		helpers.SuccessResponse(ctx, "Avatar uploaded successfully", gin.H{"avatar_url": avatarURL})
 	}
 }

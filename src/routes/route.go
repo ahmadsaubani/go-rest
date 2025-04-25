@@ -42,6 +42,7 @@ func API(db *database.DBConnection) *gin.Engine {
 		{
 			v1.GET("/user/profile", user.GetProfile)
 			v1.GET("/users", user.GetAllUsers(userService))
+			v1.POST("/user/upload/avatar", user.UploadAvatar(userService))
 
 			v1.POST("/token/refresh", auth.RefreshToken(authService))
 			v1.POST("/user/logout", auth.Logout(authService))
