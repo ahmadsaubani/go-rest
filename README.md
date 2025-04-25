@@ -1,12 +1,11 @@
 
 ## Getting Started
-
 1. **Clone the repository**:
-   ```bash
-   git clone https://github.com/ahmadsaubani/go-rest.git
+```bash
+git clone https://github.com/ahmadsaubani/go-rest.git
+```
 
-
-2. **_How_To_Run_Development**:
+2. **How To Run Development**:
 ```sh
 Requirements:
 - go > 1.20.x
@@ -81,8 +80,8 @@ This Go-based project is designed to provide an API with authentication and user
 
 ### **1. `src/`**
 The core source code of the application. This folder contains controllers, routes, entities, helpers, middleware, seeders, services, and utilities.
-- **`config/database/`**
-  - **`config/database/`**
+- **`config/`**
+  - **`database/`**
     - **`database.go`**: Handles the configuration and initialization of the database connection. It contains the database connection setup and the DB instance initialization.
 - **`controllers/`**
   - **`api/`**: Contains the API controllers for handling incoming requests.

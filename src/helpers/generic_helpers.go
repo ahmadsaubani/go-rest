@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"regexp"
 	"strings"
+	"time"
 )
 
 type Tabler interface {
@@ -43,26 +44,41 @@ func InsertModel[T any](model *T) error {
 	} else {
 		tableName = ToSnakeCase(typ.Name()) + "s"
 	}
+
 	var columns []string
 	var placeholders []string
 	var values []any
 	var primaryKeyField reflect.Value
+
+	now := time.Now()
+
 	for i := 0; i < val.NumField(); i++ {
 		field := typ.Field(i)
 		fieldValue := val.Field(i)
 
-		// Cari primary key (id) berdasarkan tag gorm atau db
 		gormTag := field.Tag.Get("gorm")
 		dbTag := field.Tag.Get("db")
 
 		if strings.Contains(gormTag, "primaryKey") || dbTag == "id" {
 			primaryKeyField = fieldValue
-			continue // kita skip ID, karena akan diisi oleh RETURNING
+			continue
 		}
 
-		// Field yang tidak valid untuk insert
+		// Lewati field tidak valid untuk insert
 		if !fieldValue.CanInterface() || dbTag == "-" || dbTag == "" {
 			continue
+		}
+
+		// Otomatis isi created_at dan updated_at
+		if strings.ToLower(dbTag) == "created_at" || strings.ToLower(field.Name) == "CreatedAt" {
+			if fieldValue.CanSet() && fieldValue.Type() == reflect.TypeOf(time.Time{}) {
+				fieldValue.Set(reflect.ValueOf(now))
+			}
+		}
+		if strings.ToLower(dbTag) == "updated_at" || strings.ToLower(field.Name) == "UpdatedAt" {
+			if fieldValue.CanSet() && fieldValue.Type() == reflect.TypeOf(time.Time{}) {
+				fieldValue.Set(reflect.ValueOf(now))
+			}
 		}
 
 		columns = append(columns, dbTag)
@@ -233,6 +249,11 @@ func UpdateModelByIDWithMap[T any](updatedFields map[string]interface{}, id any)
 	// Menggunakan refleksi untuk mendapatkan nama tabel dengan tipe eksplisit
 	table := GetTableName(new(T)) // new(T) memberikan tipe eksplisit
 
+	// Tambahkan updated_at ke map jika belum ada
+	if _, exists := updatedFields["updated_at"]; !exists {
+		updatedFields["updated_at"] = time.Now()
+	}
+
 	var sets []string
 	var values []any
 
@@ -279,6 +300,11 @@ func UpdateModelByID[T any](model *T, id any) error {
 			tag = strings.ToLower(field.Name)
 		}
 
+		// Inject updated_at = now
+		if strings.ToLower(tag) == "updated_at" && value.Type() == reflect.TypeOf(time.Time{}) && value.CanSet() {
+			value.Set(reflect.ValueOf(time.Now()))
+		}
+
 		sets = append(sets, fmt.Sprintf("%s = $%d", tag, len(values)+1))
 		values = append(values, value.Interface())
 	}
@@ -295,8 +321,28 @@ func UpdateModelByID[T any](model *T, id any) error {
 	return err
 }
 
+func hasDeletedAt(model any) bool {
+	val := reflect.ValueOf(model).Elem()
+	typ := val.Type()
+
+	for i := 0; i < typ.NumField(); i++ {
+		field := typ.Field(i)
+		if strings.ToLower(field.Name) == "deletedat" &&
+			field.Type == reflect.TypeOf(time.Time{}) {
+			return true
+		}
+	}
+	return false
+}
+
 func DeleteModelByID[T any](model *T, id any) error {
 	if database.GormDB != nil {
+		// GORM punya soft delete bawaan, tapi kita handle manual biar konsisten
+		if hasDeletedAt(model) {
+			return database.GormDB.Model(model).
+				Where("id = ?", id).
+				Update("deleted_at", time.Now()).Error
+		}
 		return database.GormDB.Delete(model, id).Error
 	}
 
@@ -305,8 +351,14 @@ func DeleteModelByID[T any](model *T, id any) error {
 	}
 
 	table := GetTableName(model)
-	query := fmt.Sprintf("DELETE FROM %s WHERE id = $1", table)
 
+	if hasDeletedAt(model) {
+		query := fmt.Sprintf("UPDATE %s SET deleted_at = $1 WHERE id = $2", table)
+		_, err := database.SQLDB.Exec(query, time.Now(), id)
+		return err
+	}
+
+	query := fmt.Sprintf("DELETE FROM %s WHERE id = $1", table)
 	_, err := database.SQLDB.Exec(query, id)
 	return err
 }
