@@ -13,6 +13,16 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+// SeedUsers seeds users in the database, given a target count.
+//
+// If the target count is less than or equal to the current user count,
+// it will not do anything and print a success message.
+//
+// Otherwise, it will generate the difference count of users with random
+// usernames and email, but fixed password ("password123"), and insert
+// them into the database in batches.
+//
+// The elapsed time of the seeding process is printed at the end.
 func SeedUsers(db *database.DBConnection, target int64) {
 	start := time.Now()
 

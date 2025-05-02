@@ -14,20 +14,28 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func API(db *database.DBConnection) *gin.Engine {
+// API sets up the routes and handlers for the application.
+// It initializes the authentication and user services using their respective repositories.
+// The function defines a versioned API group (/api/v1) and registers various endpoints:
+// - GET /ping: Responds with a "pong" message for health checks.
+// - POST /user/register: Registers a new user using the provided authentication service.
+// - POST /user/login: Authenticates a user with the provided credentials.
+// - Secures routes with JWT middleware, ensuring protected endpoints require valid tokens:
+//   - GET /user/profile: Returns the profile of the authenticated user.
+//   - GET /users: Retrieves a list of users using the user service.
+//   - POST /user/upload/avatar: Allows users to upload avatars.
+//   - POST /token/refresh: Refreshes JWT tokens.
+//   - POST /user/logout: Logs out the user, revoking the current token.
+// Returns the configured Gin engine instance.
 
-	r := gin.Default()
-	r.Use(middleware.SecureHeadersMiddleware())
-	r.Use(middleware.RecoveryWithLogger())
-	r.Use(middleware.SaveRequestBody())
-
+func API(db *database.DBConnection, ginEngine *gin.Engine) *gin.Engine {
 	authRepo := auth_repositories.NewAuthRepository()
 	authService := auth_services.NewAuthService(authRepo)
 
 	userRepo := repositories.NewUserRepository()
 	userService := services.NewUserService(userRepo)
 
-	v1 := r.Group("/api/v1")
+	v1 := ginEngine.Group("/api/v1")
 	{
 		v1.GET("/ping", func(context *gin.Context) {
 			context.JSON(http.StatusOK, gin.H{
@@ -49,5 +57,5 @@ func API(db *database.DBConnection) *gin.Engine {
 		}
 	}
 
-	return r
+	return ginEngine
 }

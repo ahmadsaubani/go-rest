@@ -12,6 +12,18 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+type AuthRepositoryInterface interface {
+	Register(ctx context.Context, email string, username string, password string) (map[string]interface{}, error)
+	FindByEmail(email string) (*users.User, error)
+	FindByUsername(username string) (*users.User, error)
+	CreateUser(user *users.User) error
+	SaveTokens(userID int64, accessToken string, accessExp time.Time, refreshToken string, refreshExp time.Time) error
+	FindRefreshToken(token string) (*auth.RefreshToken, error)
+	MarkRefreshTokenAsUsed(id int64) error
+	MarkTokenAsRevoked(tokenID int64) error
+	FindTokenByUserIDAndToken(userID int64, tokenString string) (*auth.AccessToken, error)
+}
+
 type authRepository struct{}
 
 func NewAuthRepository() *authRepository {

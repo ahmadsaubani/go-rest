@@ -2,8 +2,9 @@ package main
 
 import (
 	"gin/src/configs/database"
+	"gin/src/configs/registrations"
 	"gin/src/routes"
-	"gin/src/seeders/user_seeders"
+	"gin/src/seeders"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
@@ -16,6 +17,10 @@ import (
 func main() {
 	// Disable console color for clean output
 	gin.DisableConsoleColor()
+	ginEngine := gin.Default()
+
+	// registration global middleware
+	ginEngine = registrations.GlobalMiddlewares(ginEngine)
 
 	// Load environment variables from .env file
 	if err := godotenv.Load(); err != nil {
@@ -25,11 +30,11 @@ func main() {
 	// Establish database connection
 	db := database.ConnectDatabase()
 
-	// Seed users
-	user_seeders.SeedUsers(db, 5000)
+	// run seeders
+	seeders.Run(db)
 
 	// Initialize routes
-	r := routes.API(db)
+	r := routes.API(db, ginEngine)
 
 	// Run the server on port 9000
 	if err := r.Run(":9000"); err != nil {
