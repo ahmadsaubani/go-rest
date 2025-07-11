@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"gin/src/configs/database"
 	"gin/src/utils/filters"
+	utils "gin/src/utils/tablers"
 	"os"
 	"reflect"
 	"regexp"
@@ -19,9 +20,9 @@ import (
 
 const maxBatchSize = 500
 
-type Tabler interface {
-	TableName() string
-}
+// type Tabler interface {
+// 	TableName() string
+// }
 
 var matchFirstCap = regexp.MustCompile("(.)([A-Z][a-z]+)")
 var matchAllCap = regexp.MustCompile("([a-z0-9])([A-Z])")
@@ -151,7 +152,7 @@ func InsertModelBatch[T any](models []T) error {
 			firstVal := reflect.ValueOf(batch[0])
 			typ := firstVal.Type()
 			var tableName string
-			if t, ok := any(batch[0]).(Tabler); ok {
+			if t, ok := any(batch[0]).(utils.Tabler); ok {
 				tableName = t.TableName()
 			} else {
 				tableName = ToSnakeCase(typ.Name()) + "s"
@@ -266,7 +267,7 @@ func InsertModel[T any](model *T) error {
 	typ := val.Type()
 
 	var tableName string
-	if t, ok := any(model).(Tabler); ok {
+	if t, ok := any(model).(utils.Tabler); ok {
 		tableName = t.TableName()
 	} else {
 		tableName = ToSnakeCase(typ.Name()) + "s"
@@ -424,7 +425,7 @@ func GetAllModels[T any](ctx *gin.Context, models *[]T, limit, offset int) error
 	}
 
 	var model T
-	table := GetTableName(&model)
+	table := utils.GetTableName(&model)
 	query := fmt.Sprintf("SELECT * FROM %s", table)
 
 	whereClause, args, err := filters.BuildFilters(ctx, false)
@@ -491,13 +492,24 @@ func scanRowDestinations[T any](model *T) ([]any, error) {
 // Otherwise, the table name is obtained by converting the model name to
 // snake case and appending "s".
 // For example, the model named "User" is mapped to the table named "users".
-func GetTableName[T any](model *T) string {
-	if t, ok := any(model).(Tabler); ok {
-		return t.TableName()
-	}
-	typ := reflect.TypeOf(model).Elem()
-	return ToSnakeCase(typ.Name()) + "s" // fallback User -> users
-}
+// func GetTableName[T any](model *T) string {
+// 	if t, ok := any(model).(Tabler); ok {
+// 		return t.TableName()
+// 	}
+// 	typ := reflect.TypeOf(model).Elem()
+// 	return ToSnakeCase(typ.Name()) + "s" // fallback User -> users
+// }
+
+// func GetTableNameRuntime(model any) string {
+// 	if t, ok := model.(Tabler); ok {
+// 		return t.TableName()
+// 	}
+// 	typ := reflect.TypeOf(model)
+// 	if typ.Kind() == reflect.Ptr {
+// 		typ = typ.Elem()
+// 	}
+// 	return ToSnakeCase(typ.Name()) + "s"
+// }
 
 // GetModelByID returns the model with the given ID from the database.
 // If the given model implements the Tabler interface, the table name is obtained
@@ -519,7 +531,7 @@ func GetModelByID[T any](model *T, id any) error {
 		return sql.ErrConnDone
 	}
 
-	table := GetTableName(model)
+	table := utils.GetTableName(model)
 	query := fmt.Sprintf("SELECT * FROM %s WHERE id = $1 LIMIT 1", table)
 	row := database.SQLDB.QueryRow(query, id)
 
@@ -591,7 +603,7 @@ func UpdateModelByIDWithMap[T any](updatedFields map[string]interface{}, id any)
 	}
 
 	// Menggunakan refleksi untuk mendapatkan nama tabel dengan tipe eksplisit
-	table := GetTableName(new(T)) // new(T) memberikan tipe eksplisit
+	table := utils.GetTableName(new(T)) // new(T) memberikan tipe eksplisit
 
 	// Tambahkan updated_at ke map jika belum ada
 	if _, exists := updatedFields["updated_at"]; !exists {
@@ -635,7 +647,7 @@ func UpdateModelByID[T any](model *T, id any) error {
 
 	val := reflect.ValueOf(model).Elem()
 	typ := val.Type()
-	table := GetTableName(model)
+	table := utils.GetTableName(model)
 
 	var sets []string
 	var values []any
@@ -711,7 +723,7 @@ func DeleteModelByID[T any](model *T, id any) error {
 		return sql.ErrConnDone
 	}
 
-	table := GetTableName(model)
+	table := utils.GetTableName(model)
 
 	if hasDeletedAt(model) {
 		query := fmt.Sprintf("UPDATE %s SET deleted_at = $1 WHERE id = $2", table)
@@ -751,7 +763,7 @@ func FindOneByField[T any](model *T, conditions ...any) error {
 		return sql.ErrConnDone
 	}
 
-	table := GetTableName(model)
+	table := utils.GetTableName(model)
 	whereClause := ""
 	args := []any{}
 

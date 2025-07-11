@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"gin/src/configs/database"
 	"gin/src/utils/loggers"
+	utils "gin/src/utils/tablers"
 	"math"
 	"net/http"
 	"strconv"
@@ -339,7 +340,7 @@ func CountModel[T any]() (int64, error) {
 	}
 
 	var model T
-	table := GetTableName(&model)
+	table := utils.GetTableName(&model)
 
 	query := fmt.Sprintf("SELECT COUNT(*) FROM %s", table)
 	row := database.SQLDB.QueryRow(query)

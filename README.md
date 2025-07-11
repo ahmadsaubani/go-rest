@@ -1,20 +1,24 @@
 
 # 🛠️ Project Overview
+
 This project is my first step into learning Go (Golang). I created this boilerplate as a starting point to help me build Go projects more easily in the future. It’s designed to be clean, reusable, and flexible so I don’t have to start from scratch every time I create a new project.
 
 🔧 Key Features:
-- Flexible database support: Seamless switch between GORM and native SQL based on environment configuration.
 
-- Clean architecture: Organized into controllers, services, repositories, and helpers for maintainability and testability.
-
-- Dynamic filtering & pagination: Robust support for API query filtering (e.g., ?name[like]=john) and paginated responses.
-
-- Built-in support for PostgreSQL and MySQL: Compatible with both major relational databases, including smart placeholder formatting.
-
-- Migration-friendly: Struct-based migration helpers that generate CREATE TABLE statements and triggers automatically.
+- **Flexible database support**: Easily switch between GORM and native SQL based on `.env` configuration.
+- **Clean architecture**: Organized into controllers, services, repositories, and helpers for better maintainability and testability.
+- **Dynamic filtering & pagination**: Supports powerful API query filtering (e.g., `?name[like]=john`) and paginated results.
+- **PostgreSQL and MySQL support**: Fully compatible with both databases, including intelligent SQL placeholder formatting.
+- **Migration-friendly**: Automatically generates `CREATE TABLE` statements and database triggers from Go structs.
+- **Supports GORM and native SQL**: Choose your database interaction mode via the `USE_GORM` flag in `.env`.
+- **Auto migration & auto seeding**: Automatically runs migrations and seeds based on registered entities.
+- **CLI commands via Cobra**: Includes `migrate`, `seed`, and `dropdb` commands for streamlined database management.
+- **Entity auto-registration**: Simply register your models once; they’re used for migration, seeding, and table dropping automatically.
 
 🎯 Purpose & Vision:
-This boilerplate is more than just a practice project—it's a tool I plan to grow with. I want to write clean and easy-to-maintain Go code from the start. As I build more apps, I’ll keep improving this project with better structure, tools, and performance.
+
+This boilerplate is more than just a learning exercise—it's a tool I plan to evolve as I grow with Go. My goal is to write clean, maintainable Go code from the beginning. As I build more applications, I’ll continue refining this project to improve structure, developer experience, and performance.
+
 ---
 
 ## Getting Started
@@ -31,9 +35,36 @@ Requirements:
 ```
 
 ```sh
-How to run :
-- cp .env.example .env
-- run gowatch or go main.go
+# Salin file .env default
+cp .env.example .env
+
+# Jalankan aplikasi dengan auto-reload (rekomendasi saat dev)
+gowatch
+
+# Atau manual
+go run main.go
+
+# Migration 
+go run main.go migrate
+
+# Seeder
+go run main.go seed
+
+# Drop Table
+go run main.go dropdb
+
+Semua entitas database didefinisikan dalam file:
+/src/entities/registered.go
+
+
+var RegisteredEntities = []any{
+	users.User{},
+	auth.AccessToken{},
+	auth.RefreshToken{},
+	// Tambahkan entitas lain di sini...
+}
+
+
 ```
 
 3. **List Endpoint**:

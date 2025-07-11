@@ -3,8 +3,8 @@ package database
 import (
 	"database/sql"
 	"fmt"
-	"gin/src/entities/auth"
-	"gin/src/entities/users"
+	"gin/src/entities"
+	utils "gin/src/utils/tablers"
 	"os"
 	"time"
 
@@ -21,30 +21,31 @@ type DBConnection struct {
 var GormDB *gorm.DB
 var SQLDB *sql.DB
 
-// ConnectDatabase establishes a connection to the database using either GORM or native SQL
-// based on the USE_GORM environment variable. If USE_GORM is set to "true", it connects
-// using GORM and resets the database using GORM migrations. Otherwise, it connects using
-// native SQL and performs manual migrations. It returns a DBConnection struct containing
-// the active database connection.
-
-func ConnectDatabase() *DBConnection {
+func ConnectDatabase(runMigration bool) *DBConnection {
 	fmt.Println("===== Connecting To Database =====")
 
-	useGorm := os.Getenv("USE_GORM") == "true"
+	if os.Getenv("USE_GORM") == "true" {
+		gdb := connectWithGORM()
+		if runMigration {
+			ensureMigrations(true, gdb, nil)
+		}
+		conn := &DBConnection{Gorm: gdb}
 
-	if useGorm {
-		GormDB := ConnectDatabaseUsingGorm()
-		ResetDBUsingGorm(GormDB)
-		return &DBConnection{Gorm: GormDB}
-	} else {
-		SQLDB := connectWithSQL()
-		return &DBConnection{SQL: SQLDB}
+		return conn
 	}
+
+	sdb := connectWithSQL()
+	if runMigration {
+		ensureMigrations(false, nil, sdb)
+	}
+	conn := &DBConnection{SQL: sdb}
+
+	return conn
 }
 
-func ConnectDatabaseUsingGorm() *gorm.DB {
+// connectWithGORM hanya membuka koneksi GORM, tanpa drop/recreate.
+func connectWithGORM() *gorm.DB {
 	fmt.Println("=====USING GORM=====")
-	// Load environment variables
 	cfg := LoadDBConfig()
 	dsn := cfg.ToDSN()
 
@@ -52,113 +53,100 @@ func ConnectDatabaseUsingGorm() *gorm.DB {
 	if err != nil {
 		fmt.Println("❌ Failed to connect to database using GORM: %w", err)
 	}
-
-	// Test connection
-	sqlDB, err := db.DB()
-	if err != nil {
-		fmt.Println("❌ Failed to get database instance: %w", err)
-	}
-	if err := sqlDB.Ping(); err != nil {
-		fmt.Println("❌ Database is not reachable: %w", err)
-	}
-
-	// Configure connection pool
+	sqlDB, _ := db.DB()
 	sqlDB.SetMaxOpenConns(10)
 	sqlDB.SetMaxIdleConns(5)
 	sqlDB.SetConnMaxLifetime(time.Hour)
-
-	// Set global DB instance
 	GormDB = db
-	fmt.Println("✅ Successfully connected to database using GORM!")
-
-	// Call CheckTables to check and migrate models
-	ResetDBUsingGorm(GormDB)
-
-	return GormDB
+	fmt.Println("✅ GORM connected")
+	return db
 }
 
-// ResetDB drops and recreates all tables
-func ResetDBUsingGorm(db *gorm.DB) {
-	fmt.Println("=== START RESET DB GORM MIGRATION ===")
-	fmt.Println("⚠️ Dropping all tables....")
-	err := db.Migrator().DropTable(
-		&users.User{},
-		&auth.AccessToken{},
-		&auth.RefreshToken{},
-	)
-	if err != nil {
-		fmt.Println("❌ Failed to drop tables: %w", err)
-	}
-
-	fmt.Println("✅ Dropped all tables")
-
-	fmt.Println("🔧 Migrating tables....")
-	err = db.AutoMigrate(
-		&users.User{},
-		&auth.AccessToken{},
-		&auth.RefreshToken{},
-	)
-	if err != nil {
-		fmt.Println("❌ Failed to migrate tables: %w", err)
-	}
-
-	fmt.Println("✅ Database migrated successfully")
-}
-
+// connectWithSQL hanya membuka koneksi database/sql
 func connectWithSQL() *sql.DB {
-	fmt.Println("=====USING NATIVE=====")
-
+	fmt.Println("=====USING NATIVE SQL=====")
 	cfg := LoadDBConfig()
 	dsn := cfg.ToDSN()
 
 	db, err := sql.Open("postgres", dsn)
 	if err != nil {
-		fmt.Println("❌ Failed to connect to database: %w", err)
+		fmt.Println("❌ Failed to connect to database using Native SQL: %w", err)
 	}
-
-	// Test connection
-	if err := db.Ping(); err != nil {
-		fmt.Println("❌ Database is not reachable: %w", err)
-	}
-
-	// Configure connection pool
 	db.SetMaxOpenConns(10)
 	db.SetMaxIdleConns(5)
 	db.SetConnMaxLifetime(time.Hour)
+	if err := db.Ping(); err != nil {
+		fmt.Println("❌ ping failed: %w", err)
 
+	}
 	SQLDB = db
-	fmt.Println("✅ Successfully connected to database!")
-
-	// Manual migration
-	ResetDB(SQLDB)
-
-	return SQLDB
+	fmt.Println("✅ database/sql connected")
+	return db
 }
 
-func ResetDB(db *sql.DB) {
-	fmt.Println("=== START RESET DB NATIVE MIGRATION ===")
+func ensureMigrations(useGORM bool, gdb *gorm.DB, sdb *sql.DB) {
+	gormModels := make([]interface{}, 0, len(entities.RegisteredEntities))
+	sqlTables := make([]string, 0, len(entities.RegisteredEntities))
 
-	// Drop tables
-	for _, name := range []string{"access_tokens", "refresh_tokens", "users"} {
-		dropSQL := fmt.Sprintf(`DROP TABLE IF EXISTS "%s" CASCADE;`, name)
-		if _, err := db.Exec(dropSQL); err != nil {
-			fmt.Println("❌ Drop failed: %w", err)
+	for _, model := range entities.RegisteredEntities {
+		gormModels = append(gormModels, model)
+		sqlTables = append(sqlTables, utils.GetTableName(model))
+	}
+
+	if useGORM {
+		migrator := gdb.Migrator()
+
+		allExist := true
+		for _, m := range gormModels {
+			if !migrator.HasTable(m) {
+				allExist = false
+				break
+			}
 		}
-	}
-
-	// Create tables
-	createQueries := []string{
-		GenerateCreateTableSQL("users", users.User{}),
-		GenerateCreateTableSQL("access_tokens", auth.AccessToken{}),
-		GenerateCreateTableSQL("refresh_tokens", auth.RefreshToken{}),
-	}
-
-	for _, q := range createQueries {
-
-		if _, err := db.Exec(q); err != nil {
-			fmt.Println("❌ Create failed: %w", err)
+		if allExist {
+			fmt.Println("ℹ️  All tables already exist (GORM), skipping migration")
+			return
 		}
-	}
 
-	fmt.Println("✅ Migrated using native SQL")
+		fmt.Println("🔧 Running GORM AutoMigrate…")
+		if err := gdb.AutoMigrate(gormModels...); err != nil {
+			fmt.Printf("❌ GORM AutoMigrate failed: %v\n", err)
+		} else {
+			fmt.Println("✅ GORM migration complete")
+		}
+	} else {
+		allExist := true
+		for _, tbl := range sqlTables {
+			var count int
+			err := sdb.QueryRow(`
+				SELECT COUNT(*) 
+				  FROM information_schema.tables 
+				 WHERE table_schema = 'public' AND table_name = $1
+			`, tbl).Scan(&count)
+			if err != nil || count == 0 {
+				allExist = false
+				break
+			}
+		}
+		if allExist {
+			fmt.Println("ℹ️  All tables already exist (native), skipping migration")
+			return
+		}
+
+		fmt.Println("🔧 Running native SQL migrations…")
+
+		// DROP
+		for _, name := range sqlTables {
+			_, _ = sdb.Exec(fmt.Sprintf(`DROP TABLE IF EXISTS "%s" CASCADE;`, name))
+		}
+
+		// CREATE
+		for i, model := range entities.RegisteredEntities {
+			query := GenerateCreateTableSQL(sqlTables[i], model)
+			if _, err := sdb.Exec(query); err != nil {
+				fmt.Printf("❌ failed to exec create table [%s]: %v\n", sqlTables[i], err)
+			}
+		}
+		fmt.Println("✅ Native SQL migration complete")
+	}
 }
