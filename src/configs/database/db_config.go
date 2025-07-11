@@ -21,25 +21,38 @@ type DBConfig struct {
 // be a valid string. If the port number is invalid, a warning message is printed
 // to the console. If the timezone is empty, it defaults to "UTC".
 func LoadDBConfig() DBConfig {
-	port, err := strconv.Atoi(os.Getenv("PORT"))
+	port, err := strconv.Atoi(os.Getenv("DB_PORT"))
 	if err != nil {
 		fmt.Println("invalid port number: %w", err)
 	}
 
-	tz := os.Getenv("TIMEZONE")
+	tz := os.Getenv("DB_TIMEZONE")
 	if tz == "" {
 		tz = "UTC"
 	}
 
-	return DBConfig{
-		Host:     os.Getenv("HOST"),
+	config := DBConfig{
+		Host:     os.Getenv("DB_HOST"),
 		Port:     port,
-		User:     os.Getenv("USER"),
-		Password: os.Getenv("PASSWORD"),
+		User:     os.Getenv("DB_USER"),
+		Password: os.Getenv("DB_PASSWORD"),
 		DBName:   os.Getenv("DB_NAME"),
-		SSLMode:  os.Getenv("SSL_MODE"),
+		SSLMode:  os.Getenv("DB_SSL_MODE"),
 		Timezone: tz,
 	}
+
+	// for debugging purposes, you can uncomment the following lines to print the configuration
+	// fmt.Println("=== Database Configuration ===")
+	// fmt.Printf("Host: %s\n", config.Host)
+	// fmt.Printf("Port: %d\n", config.Port)
+	// fmt.Printf("User: %s\n", config.User)
+	// fmt.Printf("Password: %s\n", config.Password)
+	// fmt.Printf("DB Name: %s\n", config.DBName)
+	// fmt.Printf("SSL Mode: %s\n", config.SSLMode)
+	// fmt.Printf("Timezone: %s\n", config.Timezone)
+	// fmt.Println("===============================")
+
+	return config
 }
 
 // ToDSN converts the DBConfig instance to a PostgreSQL connection string (DSN).

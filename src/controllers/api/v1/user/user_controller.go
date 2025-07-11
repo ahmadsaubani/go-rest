@@ -26,9 +26,11 @@ func GetProfile(ctx *gin.Context) {
 	}
 
 	response := users.ProfileResponse{
+		UUID:     user.UUID,
 		ID:       user.ID,
 		Email:    user.Email,
 		Username: user.Username,
+		Avatar:   user.Avatar,
 	}
 
 	helpers.SuccessResponse(ctx, "Data Found!", response)
@@ -54,6 +56,7 @@ func GetAllUsers(service services.UserService) gin.HandlerFunc {
 				ID:       u.ID,
 				Email:    u.Email,
 				Username: u.Username,
+				Avatar:   u.Avatar,
 			})
 		}
 

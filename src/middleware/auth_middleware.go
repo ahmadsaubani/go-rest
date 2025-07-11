@@ -2,6 +2,8 @@ package middleware
 
 import (
 	"fmt"
+	"gin/src/configs/database"
+	"gin/src/entities/auth"
 	"net/http"
 	"os"
 	"strings"
@@ -45,6 +47,34 @@ func JWTAuthMiddleware() gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "JWT secret not set"})
 			c.Abort()
 			return
+		}
+
+		// Cek revoked dari DB
+		useGorm := os.Getenv("USE_GORM") == "true"
+
+		var count int64
+		if useGorm {
+			err := database.GormDB.
+				Model(&auth.AccessToken{}).
+				Where("token = ? AND revoked = false", tokenString).
+				Count(&count).Error
+
+			if err != nil || count == 0 {
+				c.JSON(http.StatusUnauthorized, gin.H{"error": "Token not found or revoked"})
+				c.Abort()
+				return
+			}
+		} else {
+			err := database.SQLDB.QueryRow(
+				`SELECT COUNT(*) FROM access_tokens WHERE token = $1 AND revoked = false`,
+				tokenString,
+			).Scan(&count)
+
+			if err != nil || count == 0 {
+				c.JSON(http.StatusUnauthorized, gin.H{"error": "Token not found or revoked"})
+				c.Abort()
+				return
+			}
 		}
 
 		// Parse token

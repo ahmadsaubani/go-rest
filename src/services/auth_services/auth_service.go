@@ -128,8 +128,17 @@ func (s *AuthService) RefreshToken(ctx context.Context, refreshTokenString strin
 		return nil, fmt.Errorf("refresh token not found: %w", err)
 
 	}
+
 	if refreshTokenRecord.Claimed {
 		return nil, fmt.Errorf("refresh token already claimed and used: %w", err)
+	}
+
+	// Tandai token sebagai revoked
+	if refreshTokenRecord.AccessTokenID != 0 {
+		err := s.authRepo.MarkTokenAsRevoked(refreshTokenRecord.AccessTokenID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to revoke access token: %w", err)
+		}
 	}
 
 	tokenResult, err := s.GenerateTokens(userID)
@@ -183,6 +192,14 @@ func (s *AuthService) RevokeToken(ctx context.Context, tokenString string) error
 	err = s.authRepo.MarkTokenAsRevoked(tokenRecord.ID)
 	if err != nil {
 		return fmt.Errorf("failed to mark token as revoked: %w", err)
+	}
+
+	refreshToken, err := s.authRepo.FindRefreshTokenByAccessTokenID(tokenRecord.ID)
+	if err == nil && refreshToken != nil {
+		err := s.authRepo.MarkRefreshTokenAsUsed(refreshToken.ID)
+		if err != nil {
+			return fmt.Errorf("failed to mark refresh token as claimed: %w", err)
+		}
 	}
 
 	return nil

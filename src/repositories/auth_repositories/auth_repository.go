@@ -22,6 +22,7 @@ type AuthRepositoryInterface interface {
 	MarkRefreshTokenAsUsed(id int64) error
 	MarkTokenAsRevoked(tokenID int64) error
 	FindTokenByUserIDAndToken(userID int64, tokenString string) (*auth.AccessToken, error)
+	FindRefreshTokenByAccessTokenID(tokenID int64) (*auth.RefreshToken, error)
 }
 
 type authRepository struct{}
@@ -117,6 +118,15 @@ func (r *authRepository) FindRefreshToken(token string) (*auth.RefreshToken, err
 	var refresh auth.RefreshToken
 	if err := helpers.FindOneByField(&refresh, "token", token); err != nil {
 		return nil, fmt.Errorf("token not found: %w", err)
+	}
+	return &refresh, nil
+}
+
+func (r *authRepository) FindRefreshTokenByAccessTokenID(accessTokenID int64) (*auth.RefreshToken, error) {
+	var refresh auth.RefreshToken
+	err := helpers.FindOneByField(&refresh, "access_token_id", accessTokenID)
+	if err != nil {
+		return nil, fmt.Errorf("refresh token not found: %w", err)
 	}
 	return &refresh, nil
 }
